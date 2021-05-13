@@ -7,15 +7,11 @@
 ### Personal Projects
 
 [Speech Commands Classification](/https://github.com/itamar-saraf/Speech-Commands-Classification)
-<img src="images/spc-lenet.jpg?raw=true"/>
-<img src="images/spc-dataset.jpg?raw=true"/>
+<img src="images/spc-lenet.png?raw=true"/>
+<img src="images/spc-dataset.png?raw=true"/>
 
 ---
 [Project 2 Title](/pdf/sample_presentation.pdf)
-<img src="images/dummy_thumbnail.jpg?raw=true"/>
-
----
-[Project 3 Title](http://example.com/)
 <img src="images/dummy_thumbnail.jpg?raw=true"/>
 
 ---
