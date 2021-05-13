@@ -6,7 +6,7 @@
 
 ### Personal Projects
 
-[Project 1 Title](/sample_page)
+[Speech Commands Classification](/https://github.com/itamar-saraf/Speech-Commands-Classification)
 <img src="images/dummy_thumbnail.jpg?raw=true"/>
 
 ---
