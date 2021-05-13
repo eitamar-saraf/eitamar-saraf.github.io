@@ -7,7 +7,7 @@
 ### Personal Projects
 
 [Speech Commands Classification](/https://github.com/itamar-saraf/Speech-Commands-Classification)
-<img src="images/spc.png?raw=true"  width="500" height="600"/>
+<img src="images/spc.png?raw=true"  width="750" height="750"/>
 
 ---
 [BW-colorize - needs to be finished and organize](https://github.com/itamar-saraf/BW-colorize)
@@ -23,7 +23,7 @@
 
 - [CS232](https://github.com/itamar-saraf/cs231n)
 - [CS6476-CV - never finished](https://github.com/itamar-saraf/CS6476-CV)
-- [Advanced Deep Learning - organize](http://example.com/)
+- [Advanced Deep Learning - organize](https://drive.google.com/drive/folders/1mWchzHs6gynNr9jftDwBmUsQ1ZNsT1V5)
 ---
 
 ### Thesis
