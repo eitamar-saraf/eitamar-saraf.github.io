@@ -22,7 +22,7 @@
 ### Courses
 
 - [CS232](https://github.com/itamar-saraf/cs231n)
-- [Advanced Deep Learning](https://drive.google.com/drive/folders/1mWchzHs6gynNr9jftDwBmUsQ1ZNsT1V5)
+- [Advanced Deep Learning - needs to be cleaned](https://drive.google.com/drive/folders/1mWchzHs6gynNr9jftDwBmUsQ1ZNsT1V5)
 - [CS6476-CV - never finished](https://github.com/itamar-saraf/CS6476-CV)
 
 
