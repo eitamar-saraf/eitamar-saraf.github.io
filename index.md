@@ -7,7 +7,7 @@
 ### Personal Projects
 
 [Speech Commands Classification](/https://github.com/itamar-saraf/Speech-Commands-Classification)
-<img src="images/spc.png?raw=true"  width="750" height="750"/>
+<img src="images/spc.png?raw=true"  width="750" height="450"/>
 
 ---
 [BW-colorize - needs to be finished and organize](https://github.com/itamar-saraf/BW-colorize)
