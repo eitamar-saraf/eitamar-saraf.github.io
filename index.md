@@ -1,4 +1,4 @@
-## Under construction
+# Under construction
 
 ## Portfolio
 
@@ -7,25 +7,28 @@
 ### Personal Projects
 
 [Speech Commands Classification](/https://github.com/itamar-saraf/Speech-Commands-Classification)
-<img src="images/spc.png?raw=true"/>
+<img src="images/spc.png?raw=true"  width="500" height="600"/>
 
 ---
-[Project 2 Title](/pdf/sample_presentation.pdf)
-<img src="images/dummy_thumbnail.jpg?raw=true" width="500" height="600"/>
-
----
-
-### Category Name 2
-
-- [Project 1 Title](http://example.com/)
-- [Project 2 Title](http://example.com/)
-- [Project 3 Title](http://example.com/)
-- [Project 4 Title](http://example.com/)
-- [Project 5 Title](http://example.com/)
+[BW-colorize - needs to be finished and organize](https://github.com/itamar-saraf/BW-colorize)
+<img src="images/dummy_thumbnail.jpg?raw=true"/>
 
 ---
 
+[One Shot Speaker Recognition - needs to be cleand](https://github.com/itamar-saraf/speaker-recognition-one-shot)
+<img src="images/dummy_thumbnail.jpg?raw=true"/>
 
+
+### Courses
+
+- [CS232](https://github.com/itamar-saraf/cs231n)
+- [CS6476-CV - never finished](https://github.com/itamar-saraf/CS6476-CV)
+- [Advanced Deep Learning - organize](http://example.com/)
+---
+
+### Thesis
+
+Code and Research Question will be provided by request.
 
 
 ---
