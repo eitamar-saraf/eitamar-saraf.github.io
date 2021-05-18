@@ -6,7 +6,7 @@
 
 ### Personal Projects
 
-[Speech Commands Classification](/https://github.com/itamar-saraf/Speech-Commands-Classification)
+[Speech Commands Classification](https://github.com/itamar-saraf/Speech-Commands-Classification)
 <img src="images/spc.png?raw=true"/>
 
 ---
