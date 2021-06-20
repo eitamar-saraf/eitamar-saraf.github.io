@@ -9,7 +9,7 @@
 
 ---
 [BW-colorize](https://github.com/itamar-saraf/BW-colorize)
-<img src="images/dummy_thumbnail.jpg?raw=true"/>
+<img src="images/u-net-architecture.png?raw=true"/>
 
 
 ### Courses
