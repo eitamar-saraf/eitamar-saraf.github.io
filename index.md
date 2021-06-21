@@ -15,7 +15,7 @@
 ### Courses
 
 - [CS232](https://github.com/itamar-saraf/cs231n)
-- [Adverserial Learning Yandex](https://github.com/moshenas/Adverserial_Learning_Yandex)
+- [Adversarial Learning Yandex](https://github.com/moshenas/Adverserial_Learning_Yandex)
 - [Deep Learning for Text and Sequences](https://github.com/itamar-saraf/Deep-Learning-for-Text-and-Sequences)
 
 
