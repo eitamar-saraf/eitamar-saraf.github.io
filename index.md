@@ -8,7 +8,7 @@
 <img src="images/spc.png?raw=true"/>
 
 ---
-[Mnist Anomaly detection](https://github.com/itamar-saraf/Mnist-Anomaly-detection)
+[Mnist Anomaly Detection](https://github.com/itamar-saraf/Mnist-Anomaly-detection)
 <img src="images/vae.png?raw=true"/>
 
 ---
