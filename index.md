@@ -8,13 +8,17 @@
 <img src="images/spc.png?raw=true"/>
 
 ---
+[Mnist-Anomaly-detection](https://github.com/itamar-saraf/Mnist-Anomaly-detection)
+<img src="images/vae.png?raw=true"/>
+
+---
 [BW-colorize](https://github.com/itamar-saraf/BW-colorize)
 <img src="images/u-net-architecture.png?raw=true"/>
 
 
 ### Courses
 
-- [CS232](https://github.com/itamar-saraf/cs231n)
+- [cs231n](https://github.com/itamar-saraf/cs231n)
 - [Adversarial Learning Yandex](https://github.com/moshenas/Adverserial_Learning_Yandex)
 - [Deep Learning for Text and Sequences](https://github.com/itamar-saraf/Deep-Learning-for-Text-and-Sequences)
 
