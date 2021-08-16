@@ -8,11 +8,11 @@
 <img src="images/spc.png?raw=true"/>
 
 ---
-[Mnist-Anomaly-detection](https://github.com/itamar-saraf/Mnist-Anomaly-detection)
+[Mnist Anomaly detection](https://github.com/itamar-saraf/Mnist-Anomaly-detection)
 <img src="images/vae.png?raw=true"/>
 
 ---
-[BW-colorize](https://github.com/itamar-saraf/BW-colorize)
+[BW colorize](https://github.com/itamar-saraf/BW-colorize)
 <img src="images/u-net-architecture.png?raw=true"/>
 
 
