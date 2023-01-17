@@ -5,7 +5,7 @@
 ### Personal Projects
 
 [Speech Commands Classification](https://github.com/itamar-saraf/Speech-Commands-Classification)
-<img src="images/spc.png?raw=true"/>
+Speech Commands Classification is a project that aims to classify speech commands using a Convolutional Neural Network (CNN).
 
 ---
 [Mnist Anomaly Detection](https://github.com/itamar-saraf/Mnist-Anomaly-detection)
