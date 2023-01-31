@@ -4,17 +4,18 @@
 
 ### Personal Projects
 
-[Speech Commands Classification](https://github.com/itamar-saraf/Speech-Commands-Classification)
+[Speech Commands Classification](https://github.com/eitamar-saraf/Speech-Commands-Classification)
 
 Speech Commands Classification is a project that aims to classify speech commands using a Convolutional Neural Network (CNN).
 
 ---
-[Mnist Anomaly Detection](https://github.com/itamar-saraf/Mnist-Anomaly-detection)
-<img src="images/vae.png?raw=true"/>
+[BW colorize](https://github.com/eitamar-saraf/BW-colorize)
+ 
+B&W colorization involves the use of conditional Generative Adversarial Networks (GANs) for transforming grayscale images into RGB. 
 
 ---
-[BW colorize](https://github.com/itamar-saraf/BW-colorize)
-<img src="images/u-net-architecture.png?raw=true"/>
+[Mnist Anomaly Detection](https://github.com/eitamar-saraf/Mnist-Anomaly-detection)
 
+The purpose of this work is to detect anomalies in a small dataset (100 images) from MNIST that do not have labels.
 
 ---
