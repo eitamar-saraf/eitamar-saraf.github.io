@@ -22,6 +22,16 @@
 
         <p>{{ site.description | default: site.github.project_tagline }}</p>
 
+        <!-- Navigation Menu -->
+        <nav class="site-nav">
+          <ul>
+            <li><a href="{{ "/" | absolute_url }}">🏠 Home</a></li>
+            <li><a href="{{ "/bio/" | absolute_url }}">📖 Bio</a></li>
+            <li><a href="{{ "/cv/" | absolute_url }}">📄 CV</a></li>
+            <li><a href="{{ "/blog/" | absolute_url }}">🔬 Blog</a></li>
+          </ul>
+        </nav>
+
         {% if site.github.is_project_page %}
         <p class="view"><a href="{{ site.github.repository_url }}">View the Project on GitHub <small>{{ site.github.repository_nwo }}</small></a></p>
         {% endif %}
@@ -47,6 +57,7 @@
         {% if site.github.is_project_page %}
         <p>This project is maintained by <a href="{{ site.github.owner_url }}">{{ site.github.owner_name }}</a></p>
         {% endif %}
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
       </footer>
     </div>
     <script src="{{ "/assets/js/scale.fix.js" | relative_url }}"></script>
