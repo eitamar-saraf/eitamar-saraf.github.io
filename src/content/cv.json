@@ -1,0 +1,14 @@
+{
+  "name": "Eitamar Saraf",
+  "title": "Machine Learning Engineer",
+  "email": "your.email@example.com",
+  "location": "Tel Aviv, Israel",
+  "summary": "Experienced ML engineer with a passion for interactive demos and education.",
+  "skills": ["Python", "TensorFlow", "PyTorch", "React", "Astro", "Tailwind CSS"],
+  "experience": [],
+  "education": [],
+  "links": [
+    {"label": "GitHub", "url": "https://github.com/eitamar-saraf"},
+    {"label": "LinkedIn", "url": "https://linkedin.com/in/eitamar-saraf"}
+  ]
+}
