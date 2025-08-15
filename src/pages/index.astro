@@ -1,26 +1,22 @@
----
 
 ---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
 
-
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Eitamar Saraf Portfolio</title>
-	</head>
-	<body class="min-h-screen bg-gray-50 text-gray-900">
-		<main class="max-w-2xl mx-auto py-16 px-4">
-			<h1 class="text-4xl font-bold mb-4">Eitamar Saraf Portfolio</h1>
-			<p class="mb-8">Welcome! Explore my interactive machine learning demos, blog, CV, and more.</p>
-			<nav class="flex flex-col gap-4">
-				<a href="/about" class="text-blue-600 hover:underline">Bio</a>
-				<a href="/cv" class="text-blue-600 hover:underline">CV</a>
-				<a href="/blog" class="text-blue-600 hover:underline">Blog</a>
-				<a href="/projects" class="text-blue-600 hover:underline">Projects</a>
-			</nav>
-		</main>
-	</body>
-</html>
+<BaseLayout>
+  <main class="max-w-2xl mx-auto py-16 px-4">
+    <div class="flex flex-row items-center gap-8 mb-8">
+      <img src="/images/myself.png" alt="Eitamar Saraf" class="w-20 h-20 rounded-full border shadow object-cover flex-shrink-0" />
+      <div>
+        <h1 class="text-3xl font-bold mb-2">Eitamar Saraf</h1>
+        <p class="text-base mb-4">
+          Deep learning researcher (M.Sc. Computer Science, GPA 90) with 5 years of experience in computer vision and NLP, specializing in multi-modal AI systems and model architecture innovation.<br />
+          Led research and development at Leo AI, Microsoft, and the IDF, advancing LLM/LMM architectures, NLP models, and computer vision systems for real-world applications.<br />
+          Managed teams, built end-to-end ML pipelines, and delivered production-ready solutions in both research and engineering roles.<br />
+          Education includes M.Sc. from Bar-Ilan University (DNA separation thesis) and B.Sc. from Ariel University (Dean's List, GPA 89).<br />
+          Technical expertise: Python, JavaScript, C++, React, Node.js, PyTorch, Hugging Face, Docker, CI/CD, and cloud platforms.
+        </p>
+      </div>
+    </div>
+  </main>
+</BaseLayout>

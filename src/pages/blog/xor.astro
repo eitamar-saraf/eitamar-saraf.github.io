@@ -1,0 +1,74 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout>
+  <main class="max-w-3xl mx-auto py-12 px-4">
+    <h1 class="text-3xl font-bold mb-3">XOR: Linear vs Non‑Linear Models</h1>
+    <p class="mb-6 text-gray-700">Why linear models fail on XOR and how non‑linear methods succeed.</p>
+
+    <div class="flex items-center gap-3 mb-8">
+      <a href="/demos/xor" class="inline-flex items-center gap-2 px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Open Live Demo</a>
+      <a href="https://github.com/eitamar-saraf/XOR" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-4 py-2 rounded border text-blue-700 hover:bg-blue-50">Repository</a>
+    </div>
+
+    <h2 class="text-2xl font-semibold mb-2">TL;DR</h2>
+    <ul class="list-disc list-inside mb-8 text-gray-700">
+      <li><b>XOR is a classic example of a problem that cannot be solved by a straight line.</b> If you try to separate the two classes with a line, you’ll always misclassify some points.</li>
+      <li><b>Non-linear models can solve XOR by creating curved boundaries.</b> This is possible by adding new features (like x1·x2), using kernel tricks, or training a neural network (MLP).</li>
+      <li><b>Linear models get stuck at ~50% accuracy.</b> Non-linear models can reach nearly perfect accuracy on this dataset.</li>
+    </ul>
+
+  <h2 class="text-2xl font-semibold mb-3">What is XOR?</h2>
+  <p class="mb-4 text-gray-700">XOR stands for "exclusive or." It’s a simple logic function: given two inputs, the output is 1 if exactly one input is 1, and 0 otherwise. In machine learning, we use XOR as a toy problem to test if a model can learn non-linear relationships.<br /><br />
+  Imagine plotting all possible input pairs (x1, x2) on a grid. For XOR, the points (0,0) and (1,1) belong to one class (say, blue), and (0,1) and (1,0) belong to the other class (red). If you try to draw a straight line to separate these, you’ll see it’s impossible: no line can split the classes perfectly.</p>
+
+  <h2 class="text-2xl font-semibold mb-3">How is the data generated?</h2>
+  <p class="mb-4 text-gray-700">To make the problem more realistic, we don’t just use the four points. Instead, we sample points around each corner using a bit of random noise (Gaussian blobs). This creates clusters for each class, making the task similar to real-world data where points aren’t perfectly clean.</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+      <figure class="bg-white rounded border p-2"><img src="/plots/xor/01_xor_training_scatter.png" alt="XOR training set" class="w-full rounded" /><figcaption class="mt-2 text-xs text-gray-600">Training set</figcaption></figure>
+      <figure class="bg-white rounded border p-2"><img src="/plots/xor/02_xor_test_scatter.png" alt="XOR test set" class="w-full rounded" /><figcaption class="mt-2 text-xs text-gray-600">Held‑out test set</figcaption></figure>
+    </div>
+
+    <h2 class="text-2xl font-semibold mb-3">Why can’t a straight line solve XOR?</h2>
+    <p class="mb-4 text-gray-700">A "linear model" tries to separate data using a straight line (or plane in higher dimensions). For XOR, no matter how you position the line, you’ll always have points from both classes on each side. This is called "not linearly separable."<br /><br />
+    To solve XOR, we need a model that can draw a <b>curved boundary</b>. There are several ways to do this:</p>
+    <ul class="list-disc list-inside mb-4 text-gray-700">
+      <li><b>Add a new feature:</b> If we include x1·x2 as a feature, the model can use it to bend the boundary. This is called "feature engineering."</li>
+      <li><b>Kernel methods:</b> Support Vector Machines (SVM) with an RBF kernel can implicitly add many non-linear features, allowing curved boundaries.</li>
+      <li><b>Neural networks:</b> A small Multi-Layer Perceptron (MLP) can learn to combine features in a non-linear way, creating flexible boundaries.</li>
+    </ul>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+      <figure class="bg-white rounded border p-2"><img src="/plots/xor/10_linear_logreg_boundary.png" alt="Linear Logistic Regression" class="w-full rounded" /><figcaption class="mt-2 text-xs text-gray-600">Linear Logistic Regression</figcaption></figure>
+      <figure class="bg-white rounded border p-2"><img src="/plots/xor/11_linear_svm_boundary.png" alt="Linear SVM" class="w-full rounded" /><figcaption class="mt-2 text-xs text-gray-600">Linear SVM</figcaption></figure>
+      <figure class="bg-white rounded border p-2 md:col-span-2"><img src="/plots/xor/12_poly2_logreg_boundary.png" alt="Polynomial + Logistic Regression" class="w-full rounded" /><figcaption class="mt-2 text-xs text-gray-600">Poly features (x1, x2, x1·x2) + Logistic Regression</figcaption></figure>
+      <figure class="bg-white rounded border p-2"><img src="/plots/xor/13_svm_rbf_boundary.png" alt="RBF SVM" class="w-full rounded" /><figcaption class="mt-2 text-xs text-gray-600">SVM with RBF kernel</figcaption></figure>
+      <figure class="bg-white rounded border p-2"><img src="/plots/xor/14_mlp_boundary.png" alt="MLP" class="w-full rounded" /><figcaption class="mt-2 text-xs text-gray-600">Small multilayer perceptron</figcaption></figure>
+    </div>
+
+  <h2 class="text-2xl font-semibold mb-3">How do different models perform?</h2>
+  <p class="mb-4 text-gray-700">We train several models and look at their decision boundaries:<br /><br />
+  <b>Linear Logistic Regression & Linear SVM:</b> Both try to draw a straight line. As expected, they fail to separate the classes and get stuck at about 50% accuracy.<br /><br />
+  <b>Polynomial Features + Logistic Regression:</b> By adding x1·x2, the model can draw a curved boundary (like a hyperbola) and separate the classes.<br /><br />
+  <b>SVM with RBF Kernel:</b> The kernel trick lets the SVM create complex boundaries without manually adding features.<br /><br />
+  <b>MLP:</b> The neural network learns its own features and can fit the XOR perfectly if it’s big enough and trained well.</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+      <figure class="bg-white rounded border p-2"><img src="/plots/xor/20_lc_linear_logreg.png" alt="Learning curve — linear LR" class="w-full rounded" /><figcaption class="mt-2 text-xs text-gray-600">Linear Logistic Regression</figcaption></figure>
+      <figure class="bg-white rounded border p-2"><img src="/plots/xor/21_lc_mlp.png" alt="Learning curve — MLP" class="w-full rounded" /><figcaption class="mt-2 text-xs text-gray-600">MLP</figcaption></figure>
+    </div>
+
+  <h2 class="text-2xl font-semibold mb-3">What does “non-linear” mean here?</h2>
+  <p class="mb-4 text-gray-700">When we say a model is "non-linear," we mean its decision boundary isn’t a straight line. For example, adding x1·x2 as a feature lets the model draw a curve. The model is still "linear" in its weights, but the boundary in the original input space is curved.<br /><br />
+  Kernel methods and neural networks are other ways to get non-linear boundaries. Kernels add lots of features behind the scenes; neural networks learn them automatically.</p>
+
+    <div class="mt-10 flex items-center gap-3">
+      <a href="/demos/xor" class="inline-flex items-center gap-2 px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Try it live</a>
+      <a href="https://github.com/eitamar-saraf/XOR" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-4 py-2 rounded border text-blue-700 hover:bg-blue-50">View code</a>
+    </div>
+
+  <h2 class="text-2xl font-semibold mb-3">Try it yourself!</h2>
+  <p class="mb-4 text-gray-700">Check out the <a href="/demos/xor" class="text-blue-700 underline">live demo</a> to play with XOR data and see how changing the model or features affects the decision boundary. You can also view the <a href="https://github.com/eitamar-saraf/XOR" target="_blank" rel="noopener" class="text-blue-700 underline">code on GitHub</a> to see how it’s implemented.</p>
+
+  <p class="mt-6 text-sm text-gray-600">Plots above are pre‑generated for clarity. The live demo runs a simple trainer in your browser so you can experiment and build intuition.</p>
+  </main>
+</BaseLayout>
