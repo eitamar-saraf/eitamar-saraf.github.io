@@ -61,13 +61,81 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   <p class="mb-4 text-gray-700">When we say a model is "non-linear," we mean its decision boundary isn’t a straight line. For example, adding x1·x2 as a feature lets the model draw a curve. The model is still "linear" in its weights, but the boundary in the original input space is curved.<br /><br />
   Kernel methods and neural networks are other ways to get non-linear boundaries. Kernels add lots of features behind the scenes; neural networks learn them automatically.</p>
 
-    <div class="mt-10 flex items-center gap-3">
-      <a href="/demos/xor" class="inline-flex items-center gap-2 px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Try it live</a>
-      <a href="https://github.com/eitamar-saraf/XOR" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-4 py-2 rounded border text-blue-700 hover:bg-blue-50">View code</a>
-    </div>
+  <div class="mb-8 p-3 rounded border bg-blue-50 text-blue-900 text-sm">
+    <b>Clarification:</b> Even if a model is linear in its <i>parameters</i> (like logistic regression), feature transformations (for example, adding x1·x2) can produce <i>non‑linear decision boundaries</i> in the original input space.
+  </div>
+
+  <h2 class="text-2xl font-semibold mb-3">Feature engineering vs. learned non‑linearity</h2>
+  <p class="mb-4 text-gray-700">The interaction feature x1·x2 effectively bends the boundary into a hyperbola‑like shape. That’s feature engineering: you design a feature you believe will help. An MLP, in contrast, learns combinations of features automatically through its hidden layers. With enough capacity and proper training, it can discover that an interaction similar to x1·x2 separates the data—without you specifying it explicitly.</p>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+    <figure class="bg-white rounded border p-2 md:col-span-2">
+      <img src="/plots/xor/30_feature_map_3d.png" alt="Feature space view using x1·x2" class="w-full rounded" />
+      <figcaption class="mt-2 text-xs text-gray-600">Viewing the data with the additional feature x1·x2 makes separation easier to visualize—the problem becomes linearly separable in the transformed space.</figcaption>
+    </figure>
+  </div>
+
+  <h2 class="text-2xl font-semibold mb-3">Trade‑offs and caveats</h2>
+  <ul class="list-disc list-inside mb-8 text-gray-700">
+    <li><b>Feature engineering:</b> Simple and cheap, but requires domain insight and doesn’t scale to complex patterns.</li>
+    <li><b>Kernel SVM:</b> Powerful with the right kernel, but can scale poorly as the dataset grows (training time and memory depend on support vectors).</li>
+    <li><b>MLP:</b> Very flexible, but needs tuning (architecture, learning rate, regularization) and can overfit if too large for the data.</li>
+  </ul>
+
+  <h2 class="text-2xl font-semibold mb-3">Performance snapshot (typical ranges)</h2>
+  <div class="mb-8 overflow-x-auto">
+    <table class="w-full text-sm border">
+      <thead class="bg-gray-100">
+        <tr>
+          <th class="text-left p-2 border">Model</th>
+          <th class="text-left p-2 border">Train accuracy</th>
+          <th class="text-left p-2 border">Test accuracy</th>
+          <th class="text-left p-2 border">Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="p-2 border">Linear Logistic Regression</td>
+          <td class="p-2 border">~45–55%</td>
+          <td class="p-2 border">~45–55%</td>
+          <td class="p-2 border">Cannot solve XOR (linearly inseparable)</td>
+        </tr>
+        <tr>
+          <td class="p-2 border">Linear SVM</td>
+          <td class="p-2 border">~45–55%</td>
+          <td class="p-2 border">~45–55%</td>
+          <td class="p-2 border">Same limitation as linear LR</td>
+        </tr>
+        <tr>
+          <td class="p-2 border">Poly features (x1·x2) + LR</td>
+          <td class="p-2 border">~95–100%</td>
+          <td class="p-2 border">~95–100%</td>
+          <td class="p-2 border">Curved boundary fits XOR</td>
+        </tr>
+        <tr>
+          <td class="p-2 border">SVM (RBF)</td>
+          <td class="p-2 border">~98–100%</td>
+          <td class="p-2 border">~98–100%</td>
+          <td class="p-2 border">Kernel trick enables non‑linear separation</td>
+        </tr>
+        <tr>
+          <td class="p-2 border">MLP</td>
+          <td class="p-2 border">~98–100%</td>
+          <td class="p-2 border">~95–100%</td>
+          <td class="p-2 border">Performance depends on tuning and regularization</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="mt-2 text-xs text-gray-600">Ranges vary with random seed and exact hyperparameters. See the live demo to experiment.</p>
+  </div>
+
 
   <h2 class="text-2xl font-semibold mb-3">Try it yourself!</h2>
   <p class="mb-4 text-gray-700">Check out the <a href="/demos/xor" class="text-blue-700 underline">live demo</a> to play with XOR data and see how changing the model or features affects the decision boundary. You can also view the <a href="https://github.com/eitamar-saraf/XOR" target="_blank" rel="noopener" class="text-blue-700 underline">code on GitHub</a> to see how it’s implemented.</p>
+  <div class="mt-10 flex items-center gap-3">
+    <a href="/demos/xor" class="inline-flex items-center gap-2 px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Try it live</a>
+    <a href="https://github.com/eitamar-saraf/XOR" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-4 py-2 rounded border text-blue-700 hover:bg-blue-50">View code</a>
+  </div>
 
   <p class="mt-6 text-sm text-gray-600">Plots above are pre‑generated for clarity. The live demo runs a simple trainer in your browser so you can experiment and build intuition.</p>
   </main>
