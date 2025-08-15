@@ -1,0 +1,325 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout>
+  <main class="max-w-5xl mx-auto py-10 px-6 sm:px-8">
+    <h1 class="text-2xl font-bold mb-2">XOR — Minimal Client Demo</h1>
+    <p class="text-gray-700 mb-6">No backend. Generate XOR data in-browser and train a tiny logistic model with linear vs. simple non-linear (x1·x2) features.</p>
+
+  <section class="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6 lg:gap-10">
+    <aside class="border rounded-lg p-4 md:p-5 bg-white shadow-sm text-sm md:row-span-2 max-w-[260px] md:max-w-none mx-auto md:mx-0 w-full">
+        <h2 class="font-semibold mb-2">Controls</h2>
+        <div class="space-y-2">
+          <label class="block">
+            <span class="text-sm text-gray-600">Model</span>
+            <select id="model" class="mt-1 w-full border rounded px-2 py-1">
+              <option value="linear">Linear (x1, x2)</option>
+              <option value="poly">Non-linear (x1, x2, x1·x2)</option>
+            </select>
+          </label>
+
+          <label class="block">
+            <span class="text-sm text-gray-600">Samples (per class)</span>
+              <input id="samples" type="range" min="20" max="300" step="10" value="120" class="w-40 max-w-full" />
+            <span class="text-xs text-gray-500"><span id="samplesVal">120</span></span>
+          </label>
+
+          <label class="block">
+            <span class="text-sm text-gray-600">Noise</span>
+              <input id="noise" type="range" min="0" max="0.5" step="0.02" value="0.12" class="w-40 max-w-full" />
+            <span class="text-xs text-gray-500"><span id="noiseVal">0.12</span></span>
+          </label>
+
+          <label class="block">
+            <span class="text-sm text-gray-600">Seed</span>
+              <input id="seed" type="number" value="7" class="mt-1 w-24 border rounded px-2 py-1" />
+          </label>
+
+          <label class="block">
+            <span class="text-sm text-gray-600">Epochs</span>
+              <input id="epochs" type="range" min="50" max="1000" step="50" value="300" class="w-40 max-w-full" />
+            <span class="text-xs text-gray-500"><span id="epochsVal">300</span></span>
+          </label>
+
+          <label class="block">
+            <span class="text-sm text-gray-600">Learning rate</span>
+              <input id="lr" type="range" min="0.001" max="0.5" step="0.001" value="0.05" class="w-40 max-w-full" />
+            <span class="text-xs text-gray-500"><span id="lrVal">0.05</span></span>
+          </label>
+
+          <div class="flex gap-2 pt-2">
+            <button id="btnRun" class="px-2.5 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700">Run</button>
+            <button id="btnShuffle" class="px-2.5 py-1.5 rounded border hover:bg-gray-50">New Seed</button>
+          </div>
+        </div>
+        </aside>
+
+    <div class="border rounded-lg p-4 md:p-5 bg-white shadow-sm">
+          <h2 class="font-semibold mb-2">Model details</h2>
+          <div class="text-sm">
+            <p class="text-gray-600 mb-1">Params array is the learned weights in this order:</p>
+            <ul class="list-disc list-inside text-gray-700">
+              <li><span class="font-mono">linear</span>: [w1, w2, b] for features [x1, x2, 1]</li>
+              <li><span class="font-mono">poly</span>: [w1, w2, w12, b] for features [x1, x2, x1·x2, 1]</li>
+            </ul>
+            <p class="text-gray-600 mt-2">“x1·x2” adds an interaction term. The model is linear in weights but the decision boundary in input space can curve.</p>
+        <div class="mt-2 p-3 bg-gray-50 rounded border text-xs">
+              <div class="font-semibold mb-1">Current equation</div>
+              <pre id="equation" class="whitespace-pre-wrap text-gray-800"></pre>
+              <p id="metrics" class="text-gray-600 mt-1"></p>
+            </div>
+          </div>
+        </div>
+
+      <div class="border rounded-lg p-4 md:p-5 bg-white shadow-sm">
+          <h2 class="font-semibold mb-2">Visualization</h2>
+        <canvas id="cnv" width="640" height="640" class="w-full h-auto border rounded"></canvas>
+        <div class="mt-2 text-xs text-gray-600">Light grid shows X and Y axes; black curve is the decision boundary (p=0.5). Points are true labels.</div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    // Utilities: PRNG (mulberry32) and Gaussian via Box-Muller
+    function mulberry32(a){return function(){var t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296}}
+    function gaussian(rng){let u=0,v=0;while(u===0)u=rng();while(v===0)v=rng();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+
+    // Generate XOR dataset in [-1,1]^2 with Gaussian noise
+    function makeXOR(nPerClass, noise, seed){
+      const rng = mulberry32(seed>>>0);
+      const data=[]; // {x:[x1,x2], y:0|1}
+      const centers = [
+        [-0.6,-0.6, 0],
+        [-0.6, 0.6, 1],
+        [ 0.6,-0.6, 1],
+        [ 0.6, 0.6, 0],
+      ];
+      for(const [cx,cy,y] of centers){
+        for(let i=0;i<nPerClass;i++){
+          const x1 = cx + noise*gaussian(rng);
+          const x2 = cy + noise*gaussian(rng);
+          data.push({x:[x1,x2], y});
+        }
+      }
+      return data;
+    }
+
+    // Feature maps
+    function phiLinear(x){return [x[0], x[1], 1];}
+    function phiPoly(x){return [x[0], x[1], x[0]*x[1], 1];}
+
+    // Logistic helpers
+    const sigmoid = (z)=>1/(1+Math.exp(-z));
+    function dot(a,b){let s=0;for(let i=0;i<a.length;i++) s+=a[i]*b[i];return s}
+
+    // Train logistic regression with gradient descent
+    function trainLogReg(data, phi, epochs=300, lr=0.05){
+      const d = phi(data[0].x).length;
+      let w = new Array(d).fill(0);
+      for(let ep=0; ep<epochs; ep++){
+        const grad = new Array(d).fill(0);
+        for(const {x,y} of data){
+          const f = phi(x);
+          const p = sigmoid(dot(w,f));
+          const err = p - y; // dCE/dz = p - y
+          for(let j=0;j<d;j++) grad[j] += err * f[j];
+        }
+        for(let j=0;j<d;j++) w[j] -= lr * grad[j]/data.length;
+      }
+      return w;
+    }
+
+    function predictProb(w, phi, x){return sigmoid(dot(w, phi(x)))}
+
+  // Drawing helpers
+    function nxToPx(nx, W){ return (nx+1)*0.5*W; }
+    function nyToPy(ny, H){ return (ny+1)*0.5*H; }
+
+    function drawGrid(ctx, W, H, step=0.2){
+      ctx.save();
+      ctx.strokeStyle = '#e5e7eb'; // gray-200
+      ctx.lineWidth = 1;
+      for(let t=-1; t<=1+1e-6; t+=step){
+        const x = nxToPx(t, W);
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+      }
+      for(let t=-1; t<=1+1e-6; t+=step){
+        const y = nyToPy(t, H);
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+      }
+      // Axis lines
+      ctx.strokeStyle = '#9ca3af'; // gray-400
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(nxToPx(0,W), 0); ctx.lineTo(nxToPx(0,W), H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, nyToPy(0,H)); ctx.lineTo(W, nyToPy(0,H)); ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawBoundary(ctx, W, H, w, mode){
+      ctx.save();
+      ctx.strokeStyle = '#111827'; // gray-900
+      ctx.lineWidth = 2;
+      const pts = [];
+      const eps = 1e-6;
+      if(mode === 'linear'){
+        const b = w[2];
+        // Try parameterizing by x1 unless near-vertical
+        if(Math.abs(w[1]) > 1e-4){
+          for(let i=0;i<=200;i++){
+            const x1 = -1 + 2*(i/200);
+            const x2 = -(w[0]*x1 + b)/(w[1] + 0);
+            if(isFinite(x2) && x2>=-1 && x2<=1){
+              pts.push([nxToPx(x1,W), nyToPy(x2,H)]);
+            } else {
+              pts.push(null);
+            }
+          }
+        } else if(Math.abs(w[0]) > 1e-4){
+          // Vertical-ish: param by x2
+          for(let i=0;i<=200;i++){
+            const x2 = -1 + 2*(i/200);
+            const x1 = -(w[1]*x2 + b)/(w[0] + 0);
+            if(isFinite(x1) && x1>=-1 && x1<=1){
+              pts.push([nxToPx(x1,W), nyToPy(x2,H)]);
+            } else {
+              pts.push(null);
+            }
+          }
+        }
+      } else {
+        // poly: features [x1, x2, x1*x2, 1] => w=[w0,w1,w2,b]
+        const b = w[3];
+        for(let i=0;i<=400;i++){
+          const x1 = -1 + 2*(i/400);
+          const denom = (w[1] + w[2]*x1);
+          if(Math.abs(denom) < eps){ pts.push(null); continue; }
+          const x2 = -(w[0]*x1 + b)/denom;
+          if(isFinite(x2) && x2>=-1 && x2<=1){
+            pts.push([nxToPx(x1,W), nyToPy(x2,H)]);
+          } else {
+            pts.push(null);
+          }
+        }
+      }
+      // Stroke segments, breaking on nulls
+      ctx.beginPath();
+      let penDown=false;
+      for(const p of pts){
+        if(!p){ penDown=false; continue; }
+        if(!penDown){ ctx.moveTo(p[0], p[1]); penDown=true; }
+        else { ctx.lineTo(p[0], p[1]); }
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawPoints(ctx, W, H, data){
+      for(const {x:[x1,x2], y} of data){
+        const px = Math.round(nxToPx(x1,W));
+        const py = Math.round(nyToPy(x2,H));
+        ctx.beginPath();
+        ctx.arc(px, py, 5, 0, Math.PI*2);
+        ctx.fillStyle = y ? '#b91c1c' : '#1d4ed8';
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = 1;
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+
+    function draw(ctx, W, H, data, w, mode){
+      ctx.clearRect(0,0,W,H);
+      drawGrid(ctx, W, H, 0.2);
+      drawBoundary(ctx, W, H, w, mode);
+      drawPoints(ctx, W, H, data);
+    }
+
+    // Metrics
+    function accuracy(data, predict){
+      let ok=0;
+      for(const d of data){
+        const p = predict(d.x) >= 0.5 ? 1 : 0;
+        if(p===d.y) ok++;
+      }
+      return ok / data.length;
+    }
+
+    // Wiring UI
+    const qs = (sel)=>document.querySelector(sel);
+    const modelSel = qs('#model');
+    const samplesEl = qs('#samples');
+    const noiseEl = qs('#noise');
+    const seedEl = qs('#seed');
+    const epochsEl = qs('#epochs');
+    const lrEl = qs('#lr');
+    const samplesVal = qs('#samplesVal');
+    const noiseVal = qs('#noiseVal');
+    const epochsVal = qs('#epochsVal');
+    const lrVal = qs('#lrVal');
+  const metrics = qs('#metrics');
+  const equationEl = qs('#equation');
+    const btnRun = qs('#btnRun');
+    const btnShuffle = qs('#btnShuffle');
+    const cnv = qs('#cnv');
+    const ctx = cnv.getContext('2d');
+
+    function syncLabels(){
+      samplesVal.textContent = samplesEl.value;
+      noiseVal.textContent = Number(noiseEl.value).toFixed(2);
+      epochsVal.textContent = epochsEl.value;
+      lrVal.textContent = Number(lrEl.value).toFixed(3);
+    }
+    [samplesEl, noiseEl, epochsEl, lrEl].forEach(el=>el.addEventListener('input', syncLabels));
+    syncLabels();
+
+    function fmtCoeff(v){
+      const s = v>=0 ? '+' : '−';
+      return `${s} ${Math.abs(v).toFixed(3)}`;
+    }
+
+    function renderEquation(mode, w){
+      if(mode==='linear'){
+        const [w1,w2,b] = w;
+        const eq = [
+          'p(x) = σ( z )',
+          `z = ${w1.toFixed(3)}·x1 ${fmtCoeff(w2)}·x2 ${fmtCoeff(b)}`,
+          'features: [x1, x2, 1]'
+        ].join('\n');
+        equationEl.textContent = eq;
+      } else {
+        const [w1,w2,w12,b] = w;
+        const eq = [
+          'p(x) = σ( z )',
+          `z = ${w1.toFixed(3)}·x1 ${fmtCoeff(w2)}·x2 ${fmtCoeff(w12)}·(x1·x2) ${fmtCoeff(b)}`,
+          'features: [x1, x2, x1·x2, 1]'
+        ].join('\n');
+        equationEl.textContent = eq;
+      }
+    }
+
+    function run(){
+      const n = Number(samplesEl.value);
+      const noise = Number(noiseEl.value);
+      const seed = Number(seedEl.value) >>> 0;
+      const epochs = Number(epochsEl.value);
+      const lr = Number(lrEl.value);
+      const mode = modelSel.value;
+
+      const data = makeXOR(n, noise, seed);
+      const phi = mode==='linear' ? phiLinear : phiPoly;
+      const w = trainLogReg(data, phi, epochs, lr);
+  const predict = (x)=>predictProb(w, phi, x);
+  const acc = accuracy(data, predict);
+      metrics.textContent = `Train accuracy: ${(acc*100).toFixed(1)}% | Params: [${w.map(v=>v.toFixed(2)).join(', ')}]`;
+      renderEquation(mode, w);
+      draw(ctx, cnv.width, cnv.height, data, w, mode);
+    }
+
+    btnRun.addEventListener('click', run);
+    btnShuffle.addEventListener('click', ()=>{ seedEl.value = (Math.random()*1e9)|0; run(); });
+
+    // Auto-run on load
+    run();
+  </script>
+</BaseLayout>

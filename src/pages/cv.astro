@@ -1,24 +1,163 @@
 ---
-import cvData from '../content/cv.json';
+import BaseLayout from '../layouts/BaseLayout.astro';
 ---
 
-<main class="max-w-2xl mx-auto py-16 px-4">
-  <h1 class="text-3xl font-bold mb-4">Curriculum Vitae</h1>
-  <p class="mb-4">{cvData.summary}</p>
-  <ul class="mb-4">
-    <li><strong>Name:</strong> {cvData.name}</li>
-    <li><strong>Title:</strong> {cvData.title}</li>
-    <li><strong>Email:</strong> {cvData.email}</li>
-    <li><strong>Location:</strong> {cvData.location}</li>
-  </ul>
-  <h2 class="text-xl font-semibold mt-8 mb-2">Skills</h2>
-  <ul class="mb-4">
-    {cvData.skills.map(skill => <li>{skill}</li>)}
-  </ul>
-  <h2 class="text-xl font-semibold mt-8 mb-2">Links</h2>
-  <ul>
-    {cvData.links.map(link => (
-      <li><a href={link.url} class="text-blue-600 hover:underline">{link.label}</a></li>
-    ))}
-  </ul>
-</main>
+<BaseLayout>
+  <main class="max-w-4xl mx-auto py-12 px-4">
+    <!-- Header / Contact -->
+    <header class="mb-8">
+      <h1 class="text-4xl font-extrabold tracking-tight">Eitamar Saraf</h1>
+      <div class="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-700">
+        <a class="text-blue-700 hover:underline" href="mailto:eitamarsaraf@gmail.com">eitamarsaraf@gmail.com</a>
+        <span>Mobile: 052-666-0687</span>
+        <a class="inline-flex items-center gap-2 rounded border px-3 py-1.5 text-blue-700 border-blue-200 hover:bg-blue-50" href="/cv/eitamar-saraf-cv.pdf" download>
+          Download CV
+        </a>
+      </div>
+    </header>
+
+    <!-- Summary -->
+  <section class="mb-10">
+      <h2 class="text-2xl font-bold mb-3">Summary</h2>
+      <p class="text-lg leading-relaxed">
+        Deep learning researcher with a M.Sc. in Computer Science and 5 years of experience across computer vision and NLP.
+        Specializing in multi‑modal AI systems with expertise in model architecture innovation and end‑to‑end machine learning development.
+        Passionate about advancing multi‑modal research that bridges text, visual, and 3D domains.
+      </p>
+  </section>
+  <hr class="my-8 border-gray-300" />
+
+    <!-- Experience -->
+  <section class="mb-10">
+      <h2 class="text-2xl font-bold mb-5">Experience</h2>
+
+      <article class="mb-6">
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h3 class="text-xl font-semibold">Deep Learning Researcher</h3>
+            <p class="text-gray-700">Leo AI</p>
+          </div>
+          <span class="text-sm text-gray-600">May 2023 – Present</span>
+        </div>
+        <ul class="list-disc pl-6 mt-2 space-y-1">
+          <li>Led innovation in LLM/LMM architecture design, introducing novel modifications during pre‑training and fine‑tuning that advanced text and 3D generation capabilities.</li>
+          <li>Drove full lifecycle development of text, image, and point‑clouds representations, from data acquisition (scraping, filtering, rendering, augmentation) to training and deploying CLIP‑based models with custom 3D extensions.</li>
+          <li>Enhanced dataset quality through Vision‑Language Model integration, creating superior training data that significantly improved downstream task performance.</li>
+        </ul>
+      </article>
+
+      <article class="mb-6">
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h3 class="text-xl font-semibold">NLP Researcher</h3>
+            <p class="text-gray-700">Microsoft</p>
+          </div>
+          <span class="text-sm text-gray-600">Oct 2021 – May 2023</span>
+        </div>
+        <ul class="list-disc pl-6 mt-2 space-y-1">
+          <li>Developed, trained, and deployed ML models for extracting and ranking captions for search items, reducing unsuccessful clicks in Office 365 search by 5%.</li>
+          <li>Developed and evaluated extractive and abstractive summarization models, including classical ML models, BERT, and GPT.</li>
+          <li>Utilized GPT‑3.5 to create datasets using advanced methods (batch prompting, multi‑task prompting) to reduce API calls, and implemented chain‑of‑thoughts (CoT) prompting to improve results.</li>
+        </ul>
+      </article>
+
+      <article class="mb-6">
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h3 class="text-xl font-semibold">Computer Vision Research Team Lead</h3>
+            <p class="text-gray-700">IDF, Ground Forces</p>
+          </div>
+          <span class="text-sm text-gray-600">Apr 2020 – Sep 2021</span>
+        </div>
+        <ul class="list-disc pl-6 mt-2 space-y-1">
+          <li>Established and led a research team (3 CV researchers, 2 data engineers), developing a CNN‑based object detector with high accuracy using advanced temporal and spatial features.</li>
+          <li>Directed research on image‑processing techniques to improve robustness and accuracy; implemented multiprocessing pipelines optimized for real‑time operation.</li>
+          <li>Spearheaded a complete CI/CD automation process with automated testing, ensuring consistent system quality.</li>
+        </ul>
+      </article>
+
+      <article class="mb-6">
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h3 class="text-xl font-semibold">Full Stack Developer</h3>
+            <p class="text-gray-700">IDF, Ground Forces</p>
+          </div>
+          <span class="text-sm text-gray-600">May 2019 – Apr 2020</span>
+        </div>
+        <ul class="list-disc pl-6 mt-2 space-y-1">
+          <li>Developed and deployed a web application utilizing React, Node.js, and C++.</li>
+        </ul>
+      </article>
+
+      <article>
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h3 class="text-xl font-semibold">Product Manager</h3>
+            <p class="text-gray-700">IDF, Ground Forces</p>
+          </div>
+          <span class="text-sm text-gray-600">Oct 2015 – May 2019</span>
+        </div>
+        <ul class="list-disc pl-6 mt-2 space-y-1">
+          <li>Managed full product development lifecycles for hardware and software applications.</li>
+        </ul>
+      </article>
+  </section>
+  <hr class="my-8 border-gray-300" />
+
+    <!-- Education -->
+  <section class="mb-10">
+      <h2 class="text-2xl font-bold mb-5">Education</h2>
+      <div class="mb-4">
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h3 class="text-xl font-semibold">M.Sc. Computer Science</h3>
+            <p class="text-gray-700">Bar‑Ilan University</p>
+          </div>
+          <span class="text-sm text-gray-600">Oct 2018 – Jan 2023</span>
+        </div>
+        <ul class="list-disc pl-6 mt-2 space-y-1">
+          <li>GPA: 90</li>
+          <li>Thesis: Deep Learning Based DNA Separation. Addressed DNA mixtures using CNNs and clustering techniques to learn and cluster latent representations of genomic data.</li>
+          <li>Advisors: Prof. Noam Shomron, Prof. Yoram Louzoun</li>
+        </ul>
+      </div>
+      <div class="mb-4">
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h3 class="text-xl font-semibold">B.Sc. Computer Science and Mathematics</h3>
+            <p class="text-gray-700">Ariel University</p>
+          </div>
+          <span class="text-sm text-gray-600">Oct 2012 – Oct 2015</span>
+        </div>
+        <ul class="list-disc pl-6 mt-2 space-y-1">
+          <li>GPA: 89</li>
+          <li>Dean's List, second year</li>
+        </ul>
+      </div>
+  </section>
+  <hr class="my-8 border-gray-300" />
+
+    <!-- Technical Skills -->
+  <section>
+      <h2 class="text-2xl font-bold mb-4">Technical Skills</h2>
+      <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-base">
+        <div>
+          <dt class="font-medium">Languages</dt>
+          <dd>Python, JavaScript, C#, Shell, CSS, HTML, C++</dd>
+        </div>
+        <div>
+          <dt class="font-medium">Frameworks</dt>
+          <dd>React.js, Node.js, Flask</dd>
+        </div>
+        <div>
+          <dt class="font-medium">Libraries</dt>
+          <dd>PyTorch, PyTorch‑Lightning, scikit‑learn, Hugging Face, OpenCV, Pandas, Hydra, gRPC</dd>
+        </div>
+        <div>
+          <dt class="font-medium">Dev Tools</dt>
+          <dd>Git, GitLab CI/CD, Azure, Docker, GCP, OpenShift</dd>
+        </div>
+      </dl>
+    </section>
+  </main>
+</BaseLayout>
