@@ -8,13 +8,38 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     <header class="mb-8">
       <h1 class="text-4xl font-extrabold tracking-tight">Eitamar Saraf</h1>
       <div class="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-700">
-        <a class="text-blue-700 hover:underline" href="mailto:eitamarsaraf@gmail.com">eitamarsaraf@gmail.com</a>
-        <span>Mobile: 052-666-0687</span>
+        <span id="email" class="text-blue-700 hover:underline cursor-pointer select-none" data-u1="eitamar" data-u2="saraf" data-d="gmail" data-t="com" title="Click to email">email [click to reveal]</span>
+        <span>Mobile: <span id="phone" class="cursor-pointer underline decoration-dotted select-none" data-r="7860-666-250" title="Click to reveal">click to reveal</span></span>
         <a class="inline-flex items-center gap-2 rounded border px-3 py-1.5 text-blue-700 border-blue-200 hover:bg-blue-50" href="/cv/eitamar-saraf-cv.pdf" download>
           Download CV
         </a>
       </div>
     </header>
+
+    <script>
+      (function(){
+        const em = document.getElementById('email');
+        if (em) {
+          const user = (em.dataset.u1 || '') + (em.dataset.u2 || '');
+          const domain = (em.dataset.d || '') + '.' + (em.dataset.t || '');
+          const addr = user + '@' + domain;
+          // Display obfuscated text, open mail client on click
+          em.textContent = user.slice(0, Math.min(6, user.length)) + '…' + ' [at] ' + (em.dataset.d || '') + ' [dot] ' + (em.dataset.t || '');
+          em.addEventListener('click', () => {
+            window.location.href = 'mailto:' + addr;
+          }, { once: true });
+        }
+
+        const ph = document.getElementById('phone');
+        if (ph) {
+          const reversed = ph.dataset.r || '';
+          const phone = reversed.split('').reverse().join('');
+          ph.addEventListener('click', () => {
+            ph.textContent = phone;
+          }, { once: true });
+        }
+      })();
+    </script>
 
     <!-- Summary -->
   <section class="mb-10">
