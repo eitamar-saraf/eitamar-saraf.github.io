@@ -3,131 +3,166 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 ---
 
 <BaseLayout>
-  <main class="max-w-6xl mx-auto py-12 px-4">
-    <h1 class="text-3xl font-bold mb-3">BatchNorm vs No‑BatchNorm: a practical, visual guide</h1>
-    <p class="mb-4 text-gray-700">Batch Normalization (BN) is one of those ideas everyone has heard “just works.” In this post, we’ll build an intuition for why—starting from the data and model, then digging into signals inside the network. Along the way, we’ll look at concrete plots that show how BN changes training dynamics.</p>
+  <main class="max-w-6xl mx-auto py-12 px-4 text-lg md:text-xl leading-relaxed">
+    <h1 class="text-5xl md:text-6xl font-extrabold mb-4">BatchNorm, Illustrated</h1>
+    <p class="mb-6 text-gray-700">A clear, visual walkthrough of what Batch Normalization (BN) does inside a network—why it lets you train faster and safer—grounded in side‑by‑side plots from the same experiments.</p>
 
-    <h2 class="text-2xl font-semibold mt-6 mb-2">TL;DR</h2>
-    <ul class="list-disc list-inside mb-6 text-gray-700">
-      <li>BN normalizes layer activations (zero mean, unit variance) per batch, then learns a scale (γ) and shift (β) so the network can still represent rich functions.</li>
-      <li>This keeps signals in healthy ranges, makes gradients more stable, and allows higher learning rates without divergence.</li>
-      <li>With BN, validation accuracy rises faster and higher; without BN, training can be slower, brittle at higher LR, and more sensitive to initialization.</li>
-      <li>BN is most effective with reasonable batch sizes; for very small batches, consider alternatives like LayerNorm/GroupNorm or tuning momentum/statistics.</li>
-    </ul>
-
-    <h2 class="text-2xl font-semibold mt-8 mb-2">The setup at a glance</h2>
-    <div class="mb-6 text-gray-700 space-y-2">
-      <p><b>Dataset.</b> CIFAR‑10 (10 classes, 32×32 color images). We use a standard train/val split with light augmentation (random crop/flip). The goal isn’t SOTA—it’s to probe training behavior.</p>
-      <p><b>Network.</b> A compact CNN with 5 conv blocks: Conv → ReLU (and BN in the BN variant), then a small classifier head. “Block 1…5” in the plots refer to these conv blocks from shallow to deep.</p>
-      <p><b>Training.</b> Same initialization, optimizer, and schedule for both variants. We sweep two learning rates (0.02 and 0.2) to show stability differences. Any gaps we see are largely due to BN.</p>
-      <p class="text-sm text-gray-600">Why this setup? Small, fast to run, and complex enough to show real effects like dead neurons, gradient scale drift, and batch‑to‑batch shifts.</p>
+    <div class="mb-6 p-4 rounded border bg-blue-50 text-blue-900">
+      <b>TL;DR.</b> BN recenters/rescales each batch (then learns <i>γ</i>, <i>β</i>), keeping activations in a friendly range. In our runs it boosts validation accuracy and calms training noise—most dramatically at lr=0.2 (≈ 89.2% with BN vs ≈ 75.1% without).
     </div>
 
-    <h2 class="text-2xl font-semibold mt-8 mb-2">What BatchNorm actually does</h2>
-    <p class="mb-6 text-gray-700">For each channel in a layer, BN recenters and rescales the activations of the current mini‑batch to have mean ≈ 0 and std ≈ 1, then applies a learned scale <i>γ</i> and shift <i>β</i>. During training it uses per‑batch stats; at inference it uses running averages collected during training. This keeps signals in a “friendly” numeric range, so gradients neither vanish nor explode easily. The optimizer sees a smoother landscape and tolerates larger learning rates.</p>
-    <div class="mb-6 p-3 rounded border bg-amber-50 text-amber-900 text-sm">
-      <b>Heads‑up:</b> With very small batches, the batch statistics can be noisy. In those cases, consider GroupNorm or LayerNorm, or tune BN momentum and learning rate.
-    </div>
+    <section class="mt-10">
+      <h2 class="text-3xl md:text-4xl font-bold mb-2">The cast and the stage</h2>
+      <ul class="list-disc list-inside text-gray-700 space-y-1">
+        <li><b>Data:</b> CIFAR‑10 (32×32), light aug (crop/flip).</li>
+        <li><b>Model:</b> A 5‑block CNN (Conv→ReLU, BN only in the BN variant) + a small head.</li>
+        <li><b>Training:</b> Same init/opt/schedule; we compare lr=0.02 and lr=0.2.</li>
+      </ul>
+      <p class="mt-3 text-gray-600 text-base md:text-lg">Goal: not SOTA—just a clean lens into how BN changes internal signals.</p>
+    </section>
 
-    <h2 class="text-2xl font-semibold mt-8 mb-2">First, the big picture: does BN help?</h2>
-    <figure class="bg-white rounded border p-2 mb-2">
-      <img src="/plots/bn/val acc compare.png" alt="Validation accuracy comparison BN vs No-BN across learning rates" class="w-full rounded" />
-    </figure>
-    <p class="text-sm text-gray-600 mb-6">Validation accuracy, BN vs No‑BN, over training (two learning rates). With BN, accuracy climbs faster and higher; without BN, it lags or destabilizes at higher LR.</p>
-
-  <p class="mb-8 text-gray-700">So BN improves validation accuracy. Without BN, the higher LR often overshoots and oscillates; with BN, training is smoother and reaches a better plateau. Now let’s open the hood and see why the optimizer’s job gets easier.</p>
-
-    <h2 class="text-2xl font-semibold mt-8 mb-2">1) Activation scale is tamed</h2>
-  <p class="mb-4 text-gray-700">Before ReLU, it’s healthy if activations are centered and reasonably scaled. If means drift or variances explode, gradients either die out or blow up as they travel through layers. BN nudges each batch back toward mean ≈ 0 and std ≈ 1, layer by layer, step by step.</p>
-  <p class="mb-3 text-gray-700"><b>How to read these plots:</b> The curves show the mean and std of pre‑ReLU activations over training. Desired behavior: means near zero and stds that settle into a stable band (not collapsing to 0 and not exploding).</p>
-    <div class="mb-4">
-      <div class="carousel" data-images='["/plots/bn/act mean pre relu block 1.png","/plots/bn/act mean pre relu block 2.png","/plots/bn/act mean pre relu block 3.png","/plots/bn/act mean pre relu block 4.png","/plots/bn/act mean pre relu block 5.png"]' data-captions='["Mean (pre‑ReLU), block 1","Mean (pre‑ReLU), block 2","Mean (pre‑ReLU), block 3","Mean (pre‑ReLU), block 4","Mean (pre‑ReLU), block 5"]'>
-        <div class="relative bg-white rounded border overflow-hidden">
-          <img class="carousel-img w-full rounded" alt="Activation mean pre‑ReLU across blocks" />
-          <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
-          <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
-        </div>
-        <div class="mt-2 text-xs text-gray-600 carousel-caption"></div>
+    <section class="mt-10">
+      <h2 class="text-3xl md:text-4xl font-bold mb-3">Quick visual: accuracy at a glance</h2>
+      <figure class="bg-white rounded border p-2 mb-2">
+        <img src="/plots/bn/val acc compare.png" alt="Validation accuracy comparison BN vs No‑BN across learning rates" class="w-full rounded" />
+      </figure>
+      <p class="text-gray-700">BN climbs faster and finishes higher, especially when we push lr to 0.2.</p>
+      <div class="mt-3 text-base md:text-lg text-gray-700">
+        <b>Numbers:</b> lr=0.2 → <span class="text-emerald-700">BN 89.19%</span> vs <span class="text-rose-700">No‑BN 75.14%</span>; lr=0.02 → BN 85.94% vs No‑BN 70.91%.
       </div>
-    </div>
-    <div class="mb-8">
-      <div class="carousel" data-images='["/plots/bn/act std pre relu block 1.png","/plots/bn/act std pre relu block 2.png","/plots/bn/act std pre relu block 3.png","/plots/bn/act std pre relu block 4.png","/plots/bn/act std pre relu block 5.png"]' data-captions='["Std (pre‑ReLU), block 1","Std (pre‑ReLU), block 2","Std (pre‑ReLU), block 3","Std (pre‑ReLU), block 4","Std (pre‑ReLU), block 5"]'>
-        <div class="relative bg-white rounded border overflow-hidden">
-          <img class="carousel-img w-full rounded" alt="Activation std pre‑ReLU across blocks" />
-          <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
-          <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
+    </section>
+
+    
+
+    <section class="mt-12">
+      <h2 class="text-3xl md:text-4xl font-bold mb-3">Episode 1 — Activation drift</h2>
+  <p class="text-gray-700 mb-3">Pre‑ReLU activations are the raw material the next layer receives. When their mean stays near 0 and their variance stays in a moderate band, gradients propagate more predictably and weight updates remain proportional. If the mean drifts away from 0 or the variance balloons, later layers keep adapting to a shifting distribution—training feels like trying to hit a moving target.</p>
+      <div class="mb-4">
+        <div class="carousel" data-images='["/plots/bn/act mean pre relu block 1.png","/plots/bn/act mean pre relu block 2.png","/plots/bn/act mean pre relu block 3.png","/plots/bn/act mean pre relu block 4.png","/plots/bn/act mean pre relu block 5.png"]' data-captions='["Mean (pre‑ReLU), block 1","Mean (pre‑ReLU), block 2","Mean (pre‑ReLU), block 3","Mean (pre‑ReLU), block 4","Mean (pre‑ReLU), block 5"]'>
+          <div class="relative bg-white rounded border overflow-hidden">
+            <img class="carousel-img w-full rounded" alt="Activation mean pre‑ReLU across blocks" />
+            <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
+            <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
+          </div>
+          <div class="mt-2 text-sm text-gray-600 carousel-caption"></div>
         </div>
-        <div class="mt-2 text-xs text-gray-600 carousel-caption"></div>
       </div>
-    </div>
-  <p class="mb-8 text-gray-700">With BN, curves are tighter and more stable—gradients propagate predictably. Without BN, curves drift with learning rate and depth (later blocks suffer more), which makes training brittle.</p>
-
-    <h2 class="text-2xl font-semibold mt-8 mb-2">2) Fewer dead activations</h2>
-  <p class="mb-4 text-gray-700">When pre‑ReLU activations live far below zero, ReLU outputs are zero and gradients stop flowing—neurons “die.” BN keeps the distribution centered, so a healthy fraction remains active.</p>
-  <p class="mb-3 text-gray-700"><b>How to read these plots:</b> We track the fraction of channels/units that are inactive after ReLU. Lower is usually better, but some sparsity is fine. Watch how high LR without BN spikes the inactive fraction.</p>
-    <div class="mb-8">
-      <div class="carousel" data-images='["/plots/bn/fraction inactive pre relu block 1.png","/plots/bn/fraction inactive pre relu block 2.png","/plots/bn/fraction inactive pre relu block 3.png","/plots/bn/fraction inactive pre relu block 4.png","/plots/bn/fraction inactive pre relu block 5.png"]' data-captions='["Inactive fraction, block 1","Inactive fraction, block 2","Inactive fraction, block 3","Inactive fraction, block 4","Inactive fraction, block 5"]'>
-        <div class="relative bg-white rounded border overflow-hidden">
-          <img class="carousel-img w-full rounded" alt="Fraction inactive pre‑ReLU across blocks" />
-          <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
-          <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
+      <div class="mb-8">
+        <div class="carousel" data-images='["/plots/bn/act std pre relu block 1.png","/plots/bn/act std pre relu block 2.png","/plots/bn/act std pre relu block 3.png","/plots/bn/act std pre relu block 4.png","/plots/bn/act std pre relu block 5.png"]' data-captions='["Std (pre‑ReLU), block 1","Std (pre‑ReLU), block 2","Std (pre‑ReLU), block 3","Std (pre‑ReLU), block 4","Std (pre‑ReLU), block 5"]'>
+          <div class="relative bg-white rounded border overflow-hidden">
+            <img class="carousel-img w-full rounded" alt="Activation std pre‑ReLU across blocks" />
+            <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
+            <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
+          </div>
+          <div class="mt-2 text-sm text-gray-600 carousel-caption"></div>
         </div>
-        <div class="mt-2 text-xs text-gray-600 carousel-caption"></div>
       </div>
-    </div>
+      <div class="p-4 rounded border bg-amber-50 text-amber-900">
+        <b>What to look for:</b> With No‑BN at lr=0.2, deeper blocks’ means drift (e.g., block5 |μ| median ≈ 2.31, p95 ≈ 4.47) and std broadens (≈ 0.86–2.23). BN keeps means near 0 (≤ ~0.43) and std tighter (≈ 0.35–0.70).
+      </div>
+    </section>
 
-    <h2 class="text-2xl font-semibold mt-8 mb-2">3) Gradients are steadier</h2>
-  <p class="mb-4 text-gray-700">BN narrows the spread of gradient norms across layers. That stability is a big reason you can crank the learning rate without divergence. If gradients swing wildly between layers, updates become inconsistent.</p>
-  <p class="mb-3 text-gray-700"><b>How to read these plots:</b> Steady curves with similar scale across blocks are good. Big spikes or tiny near‑zero gradients are red flags (exploding or vanishing signals).</p>
-    <div class="mb-8">
-      <div class="carousel" data-images='["/plots/bn/grad norm block 1.png","/plots/bn/grad norm block 2.png","/plots/bn/grad norm block 3.png","/plots/bn/grad norm block 4.png","/plots/bn/grad norm block 5.png","/plots/bn/grad norm head.png"]' data-captions='["Grad norm, block 1","Grad norm, block 2","Grad norm, block 3","Grad norm, block 4","Grad norm, block 5","Grad norm, head"]'>
-        <div class="relative bg-white rounded border overflow-hidden">
-          <img class="carousel-img w-full rounded" alt="Gradient norms across blocks" />
-          <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
-          <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
+    <section class="mt-12">
+      <h2 class="text-3xl md:text-4xl font-bold mb-3">Episode 2 — Dead activations</h2>
+  <p class="text-gray-700 mb-3">ReLU gates negative inputs to zero. If pre‑ReLU distributions slide far below zero, large swaths of units stop firing and stop receiving gradient—capacity shrinks and learning slows. Centering via BN maintains a healthier balance of active/inactive units, especially in shallower layers where gradients originate for deep stacks.</p>
+      <div class="mb-6">
+        <div class="carousel" data-images='["/plots/bn/fraction inactive pre relu block 1.png","/plots/bn/fraction inactive pre relu block 2.png","/plots/bn/fraction inactive pre relu block 3.png","/plots/bn/fraction inactive pre relu block 4.png","/plots/bn/fraction inactive pre relu block 5.png"]' data-captions='["Inactive fraction, block 1","Inactive fraction, block 2","Inactive fraction, block 3","Inactive fraction, block 4","Inactive fraction, block 5"]'>
+          <div class="relative bg-white rounded border overflow-hidden">
+            <img class="carousel-img w-full rounded" alt="Fraction inactive pre‑ReLU across blocks" />
+            <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
+            <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
+          </div>
+          <div class="mt-2 text-sm text-gray-600 carousel-caption"></div>
         </div>
-        <div class="mt-2 text-xs text-gray-600 carousel-caption"></div>
       </div>
-    </div>
+      <div class="p-4 rounded border bg-gray-50 text-gray-800">
+        <b>Numbers:</b> lr=0.2 medians (block1→block5) — BN ≈ 0.41, 0.70, 0.70, 0.88, 0.62 vs No‑BN ≈ 0.65, 0.95, 0.85, 0.90, 0.92. At lr=0.02 the gap narrows but deep layers still get sparser without BN.
+      </div>
+    </section>
 
-    <h2 class="text-2xl font-semibold mt-8 mb-2">4) Updates are sized more sanely</h2>
-  <p class="mb-4 text-gray-700">Relative update size, ||ΔW|| / ||W||, tells you how aggressively weights change compared to their current magnitude. Too small and learning stalls; too large and training thrashes. BN keeps these updates in a more consistent range across depth.</p>
-  <p class="mb-3 text-gray-700"><b>How to read these plots:</b> Look for consistent, moderate curves across blocks. With no BN at high LR, you’ll often see spikes in deeper layers or the head—signs of unstable steps.</p>
-    <div class="mb-8">
-      <div class="carousel" data-images='["/plots/bn/rel update size block 1.png","/plots/bn/rel update size block 2.png","/plots/bn/rel update size block 3.png","/plots/bn/rel update size block 4.png","/plots/bn/rel update size block 5.png","/plots/bn/rel update size head.png"]' data-captions='["Rel. update size, block 1","Rel. update size, block 2","Rel. update size, block 3","Rel. update size, block 4","Rel. update size, block 5","Rel. update size, head"]'>
-        <div class="relative bg-white rounded border overflow-hidden">
-          <img class="carousel-img w-full rounded" alt="Relative update size across blocks" />
-          <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
-          <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
+    <section class="mt-12">
+      <h2 class="text-3xl md:text-4xl font-bold mb-3">Episode 3 — Gradient noise</h2>
+  <p class="text-gray-700 mb-3">Optimizers prefer smooth, comparable gradient magnitudes across depth. When gradients spike or jitter layer‑to‑layer, step sizes become inconsistent: some layers thrash while others barely move. BN curbs activation scale drift, which reduces these downstream gradient oscillations and keeps updates in a steadier envelope.</p>
+      <div class="mb-6">
+        <div class="carousel" data-images='["/plots/bn/grad norm block 1.png","/plots/bn/grad norm block 2.png","/plots/bn/grad norm block 3.png","/plots/bn/grad norm block 4.png","/plots/bn/grad norm block 5.png","/plots/bn/grad norm head.png"]' data-captions='["Grad norm, block 1","Grad norm, block 2","Grad norm, block 3","Grad norm, block 4","Grad norm, block 5","Grad norm, head"]'>
+          <div class="relative bg-white rounded border overflow-hidden">
+            <img class="carousel-img w-full rounded" alt="Gradient norms across blocks" />
+            <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
+            <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
+          </div>
+          <div class="mt-2 text-sm text-gray-600 carousel-caption"></div>
         </div>
-        <div class="mt-2 text-xs text-gray-600 carousel-caption"></div>
       </div>
-    </div>
+      <div class="p-4 rounded border bg-rose-50 text-rose-900">
+        <b>Look closely:</b> At lr=0.2, the head and deeper blocks jitter and spike more without BN. Median bands: BN ≈ 0.29–0.50 vs No‑BN ≈ 0.46–0.64. Fewer sharp jumps → steadier steps.
+      </div>
+    </section>
 
-    <h2 class="text-2xl font-semibold mt-8 mb-2">5) Less batch‑to‑batch whiplash</h2>
-  <p class="mb-4 text-gray-700">One way to quantify “internal covariate shift” is to track how much activations shift from one mini‑batch to the next. High shifts mean the optimizer keeps chasing a moving target. BN dampens this, especially at higher learning rates.</p>
-  <p class="mb-3 text-gray-700"><b>How to read these plots:</b> Compare BN vs No‑BN for the same LR. The BN curves should be lower and smoother, meaning the distribution the next layer sees isn’t jumping around as much.</p>
-    <div class="mb-8">
-      <div class="carousel" data-images='["/plots/bn/batch to batch act shift bn-lr0.02.png","/plots/bn/batch to batch act shift Nobn-lr0.02.png","/plots/bn/batch to batch act shift bn-lr0.2.png","/plots/bn/batch to batch act shift Nobn-lr0.2.png"]' data-captions='["BN, lr=0.02","No‑BN, lr=0.02","BN, lr=0.2","No‑BN, lr=0.2"]'>
-        <div class="relative bg-white rounded border overflow-hidden">
-          <img class="carousel-img w-full rounded" alt="Batch‑to‑batch activation shift" />
-          <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
-          <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
+    <section class="mt-12">
+      <h2 class="text-3xl md:text-4xl font-bold mb-3">Episode 4 — Update scale</h2>
+  <p class="text-gray-700 mb-3">Relative update size ||ΔW||/||W|| is a sanity check: too small and progress stalls, too large and you zig‑zag. For deep nets, consistency across blocks matters—otherwise earlier layers creep while later layers whip back and forth. By taming activation/gradient scale, BN makes relative update sizes cluster into a tighter, safer band.</p>
+      <div class="mb-6">
+        <div class="carousel" data-images='["/plots/bn/rel update size block 1.png","/plots/bn/rel update size block 2.png","/plots/bn/rel update size block 3.png","/plots/bn/rel update size block 4.png","/plots/bn/rel update size block 5.png","/plots/bn/rel update size head.png"]' data-captions='["Rel. update size, block 1","Rel. update size, block 2","Rel. update size, block 3","Rel. update size, block 4","Rel. update size, block 5","Rel. update size, head"]'>
+          <div class="relative bg-white rounded border overflow-hidden">
+            <img class="carousel-img w-full rounded" alt="Relative update size across blocks" />
+            <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
+            <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
+          </div>
+          <div class="mt-2 text-sm text-gray-600 carousel-caption"></div>
         </div>
-        <div class="mt-2 text-xs text-gray-600 carousel-caption"></div>
       </div>
+      <div class="p-4 rounded border bg-gray-50 text-gray-800">
+        <b>Numbers:</b> lr=0.2 medians — BN ≈ 0.0080–0.0089 (tight); No‑BN ≈ 0.0060–0.0072. At lr=0.02 the bands are comparable, BN slightly more uniform with depth.
+      </div>
+    </section>
+
+    <section class="mt-12">
+      <h2 class="text-3xl md:text-4xl font-bold mb-3">Episode 5 — Batch‑to‑batch shift</h2>
+  <p class="text-gray-700 mb-3">From one mini‑batch to the next, the input distribution each layer sees can wiggle. If that wiggle is large, the optimizer is effectively chasing a target that keeps sliding around—wasting steps. BN damps those per‑batch fluctuations so each step sees a more stationary distribution and makes steadier progress.</p>
+      <div class="mb-6">
+        <div class="carousel" data-images='["/plots/bn/batch to batch act shift bn-lr0.02.png","/plots/bn/batch to batch act shift Nobn-lr0.02.png","/plots/bn/batch to batch act shift bn-lr0.2.png","/plots/bn/batch to batch act shift Nobn-lr0.2.png"]' data-captions='["BN, lr=0.02","No‑BN, lr=0.02","BN, lr=0.2","No‑BN, lr=0.2"]'>
+          <div class="relative bg-white rounded border overflow-hidden">
+            <img class="carousel-img w-full rounded" alt="Batch‑to‑batch activation shift" />
+            <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
+            <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
+          </div>
+          <div class="mt-2 text-sm text-gray-600 carousel-caption"></div>
+        </div>
+      </div>
+      <div class="p-4 rounded border bg-emerald-50 text-emerald-900">
+        <b>Numbers:</b> Mean shift over training — lr=0.2 → BN 0.014 vs No‑BN 0.225; lr=0.02 → BN 0.023 vs No‑BN 0.085.
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start mt-6">
+        <figure class="bg-white rounded border p-2">
+          <img src="/plots/bn/batch to batch act shift Nobn-lr0.2.png" alt="No‑BN, lr=0.2: batch‑to‑batch activation shift" class="w-full rounded" />
+          <figcaption class="text-sm text-gray-600 mt-1">No‑BN: larger, choppy shifts</figcaption>
+        </figure>
+        <figure class="bg-white rounded border p-2">
+          <img src="/plots/bn/batch to batch act shift bn-lr0.2.png" alt="BN, lr=0.2: batch‑to‑batch activation shift" class="w-full rounded" />
+          <figcaption class="text-sm text-gray-600 mt-1">BN: calmer, smoother shifts</figcaption>
+        </figure>
+      </div>
+      <div class="p-4 rounded border bg-gray-50 text-gray-800 mt-3">
+        <b>Same LR, different fate (lr=0.2):</b> No‑BN chases a moving target (≈ 0.225) and stalls near 75%; BN steadies it (≈ 0.014) and climbs to ~89%.
+      </div>
+    </section>
+
+    <section class="mt-12">
+      <h2 class="text-3xl md:text-4xl font-bold mb-3">Takeaways</h2>
+      <ul class="list-disc list-inside text-gray-700 space-y-1">
+        <li>BN centers and scales signals so gradients flow in a steadier band.</li>
+        <li>It reduces batch‑to‑batch volatility, making high LR more forgiving.</li>
+        <li>Deeper layers benefit most; No‑BN tends to drift and get noisier there.</li>
+        <li>Very small batches can make BN stats noisy—then try GroupNorm/LayerNorm, or tune BN momentum/LR.</li>
+      </ul>
+    </section>
+
+    <div class="mt-10 flex items-center gap-3">
+      <a href="/demos/batchnorm" class="inline-flex items-center gap-2 px-5 py-3 rounded bg-blue-600 text-white hover:bg-blue-700 text-base md:text-lg">Explore the interactive dashboard</a>
+      <a href="https://github.com/eitamar-saraf/BN-vs-NonBN" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-5 py-3 rounded border text-blue-700 hover:bg-blue-50 text-base md:text-lg">Repository</a>
     </div>
 
-    <div class="mb-8 p-3 rounded border bg-blue-50 text-blue-900 text-sm">
-      <b>Bottom line:</b> BN normalizes activations so gradients flow better, updates are well‑scaled, and batch‑to‑batch noise is reduced. Optimizers see a smoother problem, so you get faster, more reliable training—often at higher learning rates.
-    </div>
-
-    <div class="mt-8 flex items-center gap-3">
-      <a href="/demos/batchnorm" class="inline-flex items-center gap-2 px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Explore the interactive dashboard</a>
-      <a href="https://github.com/eitamar-saraf/BN-vs-NonBN" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-4 py-2 rounded border text-blue-700 hover:bg-blue-50">Repository</a>
-    </div>
-
-    <p class="mt-6 text-sm text-gray-600">Plots above come directly from the same runs as the dashboard. For more context, open the demo and interact with the panels.</p>
+    <p class="mt-6 text-base md:text-lg text-gray-600">Plots come from representative single runs; they show trends, not error bars. For robustness, average multiple seeds.</p>
 
     <script type="module">
       function initCarousel(el){
@@ -144,7 +179,6 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         }
         prev?.addEventListener('click', ()=>{ i = (i - 1 + imgs.length) % imgs.length; render(); });
         next?.addEventListener('click', ()=>{ i = (i + 1) % imgs.length; render(); });
-        // Keyboard support when focused
         el.setAttribute('tabindex','0');
         el.addEventListener('keydown', (e)=>{
           if(e.key==='ArrowLeft'){ i = (i - 1 + imgs.length) % imgs.length; render(); }
