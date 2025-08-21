@@ -1,0 +1,78 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout>
+  <main class="max-w-3xl mx-auto py-16 px-4">
+    <h1 class="text-3xl font-bold mb-6">Blog Post Ideas</h1>
+    <p class="mb-6 text-gray-700">A living list of experiments and writeups I'd like to explore. PRs and suggestions welcome.</p>
+
+    <section class="space-y-8">
+      <div>
+        <h2 class="text-xl font-semibold mb-2">Core Building Blocks</h2>
+        <ul class="list-disc list-inside space-y-1">
+          <li>Activation Functions Showdown — sigmoid, tanh, ReLU, GELU, Swish</li>
+          <li>Weight Initialization Matters — Xavier vs. Kaiming vs. LeCun</li>
+          <li>Learning Rate Tricks — constant vs. warmup vs. cosine</li>
+        </ul>
+      </div>
+
+      <div>
+        <h2 class="text-xl font-semibold mb-2">Normalization & Regularization</h2>
+        <ul class="list-disc list-inside space-y-1">
+          <li>BatchNorm vs. LayerNorm vs. GroupNorm vs. RMSNorm</li>
+          <li>Dropout Visualized — effect on activations and generalization</li>
+          <li>Weight Decay vs. L2 Regularization</li>
+        </ul>
+      </div>
+
+      <div>
+        <h2 class="text-xl font-semibold mb-2">Attention Mechanisms</h2>
+        <ul class="list-disc list-inside space-y-1">
+          <li>Multi-Query Attention vs. Grouped-Query vs. Multi-Head</li>
+          <li>FlashAttention vs. Naïve Attention — speed & memory benchmarks</li>
+        </ul>
+      </div>
+
+      <div>
+        <h2 class="text-xl font-semibold mb-2">Training Dynamics</h2>
+        <ul class="list-disc list-inside space-y-1">
+          <li>Optimizer Showdown — SGD, Momentum, Adam, AdamW, Lion</li>
+          <li>Precision Matters — FP32 vs. FP16 vs. BF16 (with loss scaling)</li>
+        </ul>
+      </div>
+
+      <div>
+        <h2 class="text-xl font-semibold mb-2">Architectures & Tricks</h2>
+        <ul class="list-disc list-inside space-y-1">
+          <li>Residual Connections Ablation — what if ResNet skips are removed?</li>
+          <li>Depth vs. Width — parameter efficiency experiments</li>
+          <li>CNN Kernel Size — receptive field trade-offs</li>
+          <li>Positional Encodings — sinusoidal vs. learned vs. rotary (RoPE)</li>
+          <li>Parameter-Efficient Fine-Tuning — LoRA vs. Prefix vs. Full</li>
+        </ul>
+      </div>
+
+      <div>
+        <h2 class="text-xl font-semibold mb-2">Data & Generalization</h2>
+        <ul class="list-disc list-inside space-y-1">
+          <li>Effect of Label Noise — training with 10%, 20%, 50% corrupted labels</li>
+          <li>Augmentation Strategies — CutMix, Mixup, RandAugment</li>
+          <li>Overfitting to Random Labels — “deep nets can fit anything” demo</li>
+          <li>Shuffling the Data — why it matters for convergence</li>
+          <li>Transfer Learning — pretrain vs. from-scratch on small datasets</li>
+        </ul>
+      </div>
+
+      <div>
+        <h2 class="text-xl font-semibold mb-2">Advanced & Modern Topics</h2>
+        <ul class="list-disc list-inside space-y-1">
+          <li>Scaling Laws in Miniature — small experiments showing predictable scaling</li>
+          <li>Diffusion Noise Schedules — β schedules visualized</li>
+          <li>Contrastive Learning Temperature — effect on embeddings</li>
+          <li>Vision Transformers vs. CNNs — training speed and inductive bias</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+</BaseLayout>

@@ -6,7 +6,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   <main class="max-w-5xl mx-auto py-16 px-4">
     <h1 class="text-3xl font-bold mb-6">Blog</h1>
     <p class="mb-8 text-gray-700">Read my latest posts and interactive machine learning demos.</p>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
       <a href="/blog/xor" class="group block rounded-xl overflow-hidden border bg-white shadow-sm hover:shadow-md transition-shadow">
         <div class="h-32 sm:h-36 md:h-40 bg-gray-100 overflow-hidden flex items-center justify-center">
           <img src="/plots/xor/12_poly2_logreg_boundary.png" alt="XOR demo preview" class="max-h-full max-w-full object-contain group-hover:scale-[1.02] transition-transform duration-200" loading="lazy" />
@@ -27,13 +27,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         </div>
       </a>
 
-      <a href="/blog/norms" class="group block rounded-xl overflow-hidden border bg-white shadow-sm hover:shadow-md transition-shadow">
-        <div class="aspect-[16/9] bg-gray-100 flex items-center justify-center text-gray-400 font-mono">BN · LN · RMSNorm</div>
-        <div class="p-4">
-          <h2 class="text-lg font-semibold mb-1">Norms Comparison: BN vs LN vs RMSNorm</h2>
-          <p class="text-sm text-gray-600">When to use which normalization technique and how they differ.</p>
-        </div>
-      </a>
+      
+    </div>
+    <div class="mt-10 text-sm text-gray-600">
+      <a href="/blog_posts" class="text-blue-700 hover:underline">See my list of blog post ideas →</a>
     </div>
   </main>
 </BaseLayout>
