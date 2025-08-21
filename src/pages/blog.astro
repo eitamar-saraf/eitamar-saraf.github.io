@@ -18,10 +18,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       </a>
 
       <a href="/blog/batchnorm" class="group block rounded-xl overflow-hidden border bg-white shadow-sm hover:shadow-md transition-shadow">
-        <div class="aspect-[16/9] bg-gray-100 flex items-center justify-center text-gray-400 font-mono">BN vs No-BN</div>
+        <div class="h-32 sm:h-36 md:h-40 bg-gray-100 overflow-hidden flex items-center justify-center">
+          <img src="/plots/bn/bn_card.png" alt="Validation accuracy over epochs comparing BatchNorm vs No-BN" class="max-h-full max-w-full object-contain group-hover:scale-[1.02] transition-transform duration-200" loading="lazy" />
+        </div>
         <div class="p-4">
-          <h2 class="text-lg font-semibold mb-1">BatchNorm vs No-BN</h2>
-          <p class="text-sm text-gray-600">Understanding normalization’s impact on training stability and speed.</p>
+          <h2 class="text-lg font-semibold mb-1">BatchNorm vs No‑BatchNorm: Why It Works</h2>
+          <p class="text-sm text-gray-600">How normalization stabilizes activations and speeds up training.</p>
         </div>
       </a>
 
