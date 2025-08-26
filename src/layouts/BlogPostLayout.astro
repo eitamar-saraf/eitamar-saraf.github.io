@@ -1,0 +1,31 @@
+---
+// src/layouts/BlogPostLayout.astro
+// This layout will be used for all blog posts.
+// It wraps the content in the BaseLayout and adds the Giscus component.
+import BaseLayout from './BaseLayout.astro';
+import Giscus from '../components/Giscus.astro';
+
+const { frontmatter } = Astro.props;
+---
+<BaseLayout pageTitle={frontmatter.title}>
+  <main class="max-w-3xl mx-auto py-16 px-4">
+    <article>
+      <h1 class="text-4xl font-bold mb-2">{frontmatter.title}</h1>
+      <p class="text-gray-600 mb-8">Posted on: {frontmatter.pubDate}</p>
+      
+      <div class="prose lg:prose-xl max-w-none">
+        <slot />
+      </div>
+    </article>
+    
+    <Giscus />
+  </main>
+</BaseLayout>
+
+<style is:global>
+  /* 
+    The @tailwindcss/typography plugin (via the `prose` class) 
+    handles the styling for the blog content automatically.
+    Customizations should be done in `tailwind.config.mjs`.
+  */
+</style>
