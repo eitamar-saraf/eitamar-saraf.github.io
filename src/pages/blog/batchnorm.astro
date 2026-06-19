@@ -40,8 +40,9 @@ export const frontmatter = {
       </div>
     </details>
     <div class="p-4 rounded border bg-emerald-50 text-emerald-900 text-sm md:text-base">
-      <b>Why it helps:</b> (1) prevents activation scale drift, (2) smooths gradients &amp; reduces internal covariate shift, (3) allows larger learning rates, (4) adds a mild regularization effect via batch noise.
+      <b>Why it helps:</b> (1) prevents activation scale drift, (2) smooths the optimization landscape so gradients behave more predictably, (3) allows larger learning rates, (4) adds a mild regularization effect via batch noise.
     </div>
+    <p class="mt-3 text-sm md:text-base text-gray-600">A note on mechanism: BN's benefit was historically explained as reducing <i>internal covariate shift</i> (ICS). That story is now contested—Santurkar et al. (2018), <i>How Does Batch Normalization Help Optimization?</i>, found BN does not actually reduce ICS and that its main effect is smoothing the loss landscape (making the loss and gradients more Lipschitz). The diagnostics below show <i>what</i> BN changes in the signals; treat the ICS-style narrative as intuition, not a proven cause.</p>
   </section>
 
   <section class="mt-10">
@@ -52,6 +53,9 @@ export const frontmatter = {
       <li><b>Training:</b> Same init/opt/schedule; we compare lr=0.02 and lr=0.2.</li>
     </ul>
     <p class="mt-3 text-gray-600 text-base md:text-lg">Goal: not SOTA—just a clean lens into how BN changes internal signals.</p>
+    <div class="mt-4 p-3 rounded border bg-gray-50 text-gray-700 text-sm md:text-base">
+      <b>How to read these plots.</b> The probes sit on the <i>input to each ReLU</i>—which in the BN model is the BN layer's output—so "BN centers the signal" is partly true by construction; the value is in the side-by-side contrast with the No-BN model. Per-block gradient and update magnitudes aggregate every parameter in a block, and the two models don't share an identical parameter set (BN adds <i>γ</i>, <i>β</i>), so read those as <i>trends</i>, not exact head-to-head numbers. Results come from a single seed, and the "validation" split here is CIFAR-10's test set.
+    </div>
   </section>
 
   <section class="mt-10">
@@ -71,24 +75,10 @@ export const frontmatter = {
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Episode 1 — Activation drift</h2>
 <p class="text-gray-700 mb-3">Pre‑ReLU activations are the raw material the next layer receives. When their mean stays near 0 and their variance stays in a moderate band, gradients propagate more predictably and weight updates remain proportional. If the mean drifts away from 0 or the variance balloons, later layers keep adapting to a shifting distribution—training feels like trying to hit a moving target.</p>
     <div class="mb-4">
-      <div class="carousel" data-images='["/plots/bn/act mean pre relu block 1.png","/plots/bn/act mean pre relu block 2.png","/plots/bn/act mean pre relu block 3.png","/plots/bn/act mean pre relu block 4.png","/plots/bn/act mean pre relu block 5.png"]' data-captions='["Mean (pre‑ReLU), block 1","Mean (pre‑ReLU), block 2","Mean (pre‑ReLU), block 3","Mean (pre‑ReLU), block 4","Mean (pre‑ReLU), block 5"]'>
-        <div class="relative bg-white rounded border overflow-hidden">
-          <img class="carousel-img w-full rounded" alt="Activation mean pre‑ReLU across blocks" />
-          <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
-          <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
-        </div>
-        <div class="mt-2 text-sm text-gray-600 carousel-caption"></div>
-      </div>
+      <div class="not-prose bn-carousel" data-images='["/plots/bn/act mean pre relu block 1.png","/plots/bn/act mean pre relu block 2.png","/plots/bn/act mean pre relu block 3.png","/plots/bn/act mean pre relu block 4.png","/plots/bn/act mean pre relu block 5.png"]' data-captions='["Mean (pre‑ReLU), block 1","Mean (pre‑ReLU), block 2","Mean (pre‑ReLU), block 3","Mean (pre‑ReLU), block 4","Mean (pre‑ReLU), block 5"]'></div>
     </div>
     <div class="mb-8">
-      <div class="carousel" data-images='["/plots/bn/act std pre relu block 1.png","/plots/bn/act std pre relu block 2.png","/plots/bn/act std pre relu block 3.png","/plots/bn/act std pre relu block 4.png","/plots/bn/act std pre relu block 5.png"]' data-captions='["Std (pre‑ReLU), block 1","Std (pre‑ReLU), block 2","Std (pre‑ReLU), block 3","Std (pre‑ReLU), block 4","Std (pre‑ReLU), block 5"]'>
-        <div class="relative bg-white rounded border overflow-hidden">
-          <img class="carousel-img w-full rounded" alt="Activation std pre‑ReLU across blocks" />
-          <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
-          <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
-        </div>
-        <div class="mt-2 text-sm text-gray-600 carousel-caption"></div>
-      </div>
+      <div class="not-prose bn-carousel" data-images='["/plots/bn/act std pre relu block 1.png","/plots/bn/act std pre relu block 2.png","/plots/bn/act std pre relu block 3.png","/plots/bn/act std pre relu block 4.png","/plots/bn/act std pre relu block 5.png"]' data-captions='["Std (pre‑ReLU), block 1","Std (pre‑ReLU), block 2","Std (pre‑ReLU), block 3","Std (pre‑ReLU), block 4","Std (pre‑ReLU), block 5"]'></div>
     </div>
     <div class="p-4 rounded border bg-amber-50 text-amber-900">
       <b>What to look for:</b> With No‑BN at lr=0.2, deeper blocks’ means drift (e.g., block5 |μ| median ≈ 2.31, p95 ≈ 4.47) and std broadens (≈ 0.86–2.23). BN keeps means near 0 (≤ ~0.43) and std tighter (≈ 0.35–0.70).
@@ -99,14 +89,7 @@ export const frontmatter = {
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Episode 2 — Dead activations</h2>
 <p class="text-gray-700 mb-3">ReLU gates negative inputs to zero. If pre‑ReLU distributions slide far below zero, large swaths of units stop firing and stop receiving gradient—capacity shrinks and learning slows. Centering via BN maintains a healthier balance of active/inactive units, especially in shallower layers where gradients originate for deep stacks.</p>
     <div class="mb-6">
-      <div class="carousel" data-images='["/plots/bn/fraction inactive pre relu block 1.png","/plots/bn/fraction inactive pre relu block 2.png","/plots/bn/fraction inactive pre relu block 3.png","/plots/bn/fraction inactive pre relu block 4.png","/plots/bn/fraction inactive pre relu block 5.png"]' data-captions='["Inactive fraction, block 1","Inactive fraction, block 2","Inactive fraction, block 3","Inactive fraction, block 4","Inactive fraction, block 5"]'>
-        <div class="relative bg-white rounded border overflow-hidden">
-          <img class="carousel-img w-full rounded" alt="Fraction inactive pre‑ReLU across blocks" />
-          <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
-          <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
-        </div>
-        <div class="mt-2 text-sm text-gray-600 carousel-caption"></div>
-      </div>
+      <div class="not-prose bn-carousel" data-images='["/plots/bn/fraction inactive pre relu block 1.png","/plots/bn/fraction inactive pre relu block 2.png","/plots/bn/fraction inactive pre relu block 3.png","/plots/bn/fraction inactive pre relu block 4.png","/plots/bn/fraction inactive pre relu block 5.png"]' data-captions='["Inactive fraction, block 1","Inactive fraction, block 2","Inactive fraction, block 3","Inactive fraction, block 4","Inactive fraction, block 5"]'></div>
     </div>
     <div class="p-4 rounded border bg-gray-50 text-gray-800">
       <b>Numbers:</b> lr=0.2 medians (block1→block5) — BN ≈ 0.41, 0.70, 0.70, 0.88, 0.62 vs No‑BN ≈ 0.65, 0.95, 0.85, 0.90, 0.92. At lr=0.02 the gap narrows but deep layers still get sparser without BN.
@@ -117,14 +100,7 @@ export const frontmatter = {
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Episode 3 — Gradient noise</h2>
 <p class="text-gray-700 mb-3">Optimizers prefer smooth, comparable gradient magnitudes across depth. When gradients spike or jitter layer‑to‑layer, step sizes become inconsistent: some layers thrash while others barely move. BN curbs activation scale drift, which reduces these downstream gradient oscillations and keeps updates in a steadier envelope.</p>
     <div class="mb-6">
-      <div class="carousel" data-images='["/plots/bn/grad norm block 1.png","/plots/bn/grad norm block 2.png","/plots/bn/grad norm block 3.png","/plots/bn/grad norm block 4.png","/plots/bn/grad norm block 5.png","/plots/bn/grad norm head.png"]' data-captions='["Grad norm, block 1","Grad norm, block 2","Grad norm, block 3","Grad norm, block 4","Grad norm, block 5","Grad norm, head"]'>
-        <div class="relative bg-white rounded border overflow-hidden">
-          <img class="carousel-img w-full rounded" alt="Gradient norms across blocks" />
-          <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
-          <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
-        </div>
-        <div class="mt-2 text-sm text-gray-600 carousel-caption"></div>
-      </div>
+      <div class="not-prose bn-carousel" data-images='["/plots/bn/grad norm block 1.png","/plots/bn/grad norm block 2.png","/plots/bn/grad norm block 3.png","/plots/bn/grad norm block 4.png","/plots/bn/grad norm block 5.png","/plots/bn/grad norm head.png"]' data-captions='["Grad norm, block 1","Grad norm, block 2","Grad norm, block 3","Grad norm, block 4","Grad norm, block 5","Grad norm, head"]'></div>
     </div>
     <div class="p-4 rounded border bg-rose-50 text-rose-900">
       <b>Look closely:</b> At lr=0.2, the head and deeper blocks jitter and spike more without BN. Median bands: BN ≈ 0.29–0.50 vs No‑BN ≈ 0.46–0.64. Fewer sharp jumps → steadier steps.
@@ -135,14 +111,7 @@ export const frontmatter = {
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Episode 4 — Update scale</h2>
 <p class="text-gray-700 mb-3">Relative update size ||ΔW||/||W|| is a sanity check: too small and progress stalls, too large and you zig‑zag. For deep nets, consistency across blocks matters—otherwise earlier layers creep while later layers whip back and forth. By taming activation/gradient scale, BN makes relative update sizes cluster into a tighter, safer band.</p>
     <div class="mb-6">
-      <div class="carousel" data-images='["/plots/bn/rel update size block 1.png","/plots/bn/rel update size block 2.png","/plots/bn/rel update size block 3.png","/plots/bn/rel update size block 4.png","/plots/bn/rel update size block 5.png","/plots/bn/rel update size head.png"]' data-captions='["Rel. update size, block 1","Rel. update size, block 2","Rel. update size, block 3","Rel. update size, block 4","Rel. update size, block 5","Rel. update size, head"]'>
-        <div class="relative bg-white rounded border overflow-hidden">
-          <img class="carousel-img w-full rounded" alt="Relative update size across blocks" />
-          <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
-          <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
-        </div>
-        <div class="mt-2 text-sm text-gray-600 carousel-caption"></div>
-      </div>
+      <div class="not-prose bn-carousel" data-images='["/plots/bn/rel update size block 1.png","/plots/bn/rel update size block 2.png","/plots/bn/rel update size block 3.png","/plots/bn/rel update size block 4.png","/plots/bn/rel update size block 5.png","/plots/bn/rel update size head.png"]' data-captions='["Rel. update size, block 1","Rel. update size, block 2","Rel. update size, block 3","Rel. update size, block 4","Rel. update size, block 5","Rel. update size, head"]'></div>
     </div>
     <div class="p-4 rounded border bg-gray-50 text-gray-800">
       <b>Numbers:</b> lr=0.2 medians — BN ≈ 0.0080–0.0089 (tight); No‑BN ≈ 0.0060–0.0072. At lr=0.02 the bands are comparable, BN slightly more uniform with depth.
@@ -153,14 +122,7 @@ export const frontmatter = {
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Episode 5 — Batch‑to‑batch shift</h2>
 <p class="text-gray-700 mb-3">From one mini‑batch to the next, the input distribution each layer sees can wiggle. If that wiggle is large, the optimizer is effectively chasing a target that keeps sliding around—wasting steps. BN damps those per‑batch fluctuations so each step sees a more stationary distribution and makes steadier progress.</p>
     <div class="mb-6">
-      <div class="carousel" data-images='["/plots/bn/batch to batch act shift bn-lr0.02.png","/plots/bn/batch to batch act shift Nobn-lr0.02.png","/plots/bn/batch to batch act shift bn-lr0.2.png","/plots/bn/batch to batch act shift Nobn-lr0.2.png"]' data-captions='["BN, lr=0.02","No‑BN, lr=0.02","BN, lr=0.2","No‑BN, lr=0.2"]'>
-        <div class="relative bg-white rounded border overflow-hidden">
-          <img class="carousel-img w-full rounded" alt="Batch‑to‑batch activation shift" />
-          <button class="carousel-prev absolute top-1/2 -translate-y-1/2 left-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">‹</button>
-          <button class="carousel-next absolute top-1/2 -translate-y-1/2 right-2 bg-white/80 hover:bg-white rounded-full px-3 py-1 shadow border">›</button>
-        </div>
-        <div class="mt-2 text-sm text-gray-600 carousel-caption"></div>
-      </div>
+      <div class="not-prose bn-carousel" data-images='["/plots/bn/batch to batch act shift bn-lr0.02.png","/plots/bn/batch to batch act shift Nobn-lr0.02.png","/plots/bn/batch to batch act shift bn-lr0.2.png","/plots/bn/batch to batch act shift Nobn-lr0.2.png"]' data-captions='["BN, lr=0.02","No‑BN, lr=0.02","BN, lr=0.2","No‑BN, lr=0.2"]'></div>
     </div>
     <div class="p-4 rounded border bg-emerald-50 text-emerald-900">
       <b>Numbers:</b> Mean shift over training — lr=0.2 → BN 0.014 vs No‑BN 0.225; lr=0.02 → BN 0.023 vs No‑BN 0.085.
@@ -176,7 +138,7 @@ export const frontmatter = {
       </figure>
     </div>
     <div class="p-4 rounded border bg-gray-50 text-gray-800 mt-3">
-      <b>Same LR, different fate (lr=0.2):</b> No‑BN chases a moving target (≈ 0.225) and stalls near 75%; BN steadies it (≈ 0.014) and climbs to ~89%.
+      <b>Same LR, different fate (lr=0.2):</b> the No‑BN run shows much larger batch‑to‑batch shift (≈ 0.225) and stalls near 75%, while BN's is far smaller (≈ 0.014) and it climbs to ~89%. The two move together here—but this is a correlation in a single run, and reduced shift isn't established as the underlying cause (see the mechanism note above).
     </div>
   </section>
 
@@ -197,28 +159,101 @@ export const frontmatter = {
 
   <p class="mt-6 text-base md:text-lg text-gray-600">Plots come from representative single runs; they show trends, not error bars. For robustness, average multiple seeds.</p>
 
+  <style is:global>
+    .bn-carousel{border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+    .bn-carousel:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
+    .bn-carousel__stage{position:relative;display:flex;align-items:center;justify-content:center;background:#f8fafc;aspect-ratio:1200 / 855}
+    .bn-carousel__img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block;margin:0}
+    .bn-carousel__btn{position:absolute;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid #e5e7eb;border-radius:9999px;background:rgba(255,255,255,.9);color:#374151;font-size:22px;line-height:1;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.12);transition:background .15s ease,transform .1s ease}
+    .bn-carousel__btn:hover{background:#fff}
+    .bn-carousel__btn:active{transform:translateY(-50%) scale(.92)}
+    .bn-carousel__btn--prev{left:12px}
+    .bn-carousel__btn--next{right:12px}
+    .bn-carousel__bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border-top:1px solid #e5e7eb;background:#fff}
+    .bn-carousel__caption{font-size:.875rem;color:#4b5563;font-weight:500}
+    .bn-carousel__nav{display:flex;align-items:center;gap:12px}
+    .bn-carousel__dots{display:flex;gap:6px}
+    .bn-carousel__dot{width:8px;height:8px;padding:0;border:0;border-radius:9999px;background:#d1d5db;cursor:pointer;transition:background .15s ease,transform .15s ease}
+    .bn-carousel__dot:hover{background:#9ca3af}
+    .bn-carousel__dot--active{background:#2563eb;transform:scale(1.3)}
+    .bn-carousel__count{font-size:.8rem;color:#6b7280;font-variant-numeric:tabular-nums;white-space:nowrap}
+    @media (max-width:480px){.bn-carousel__btn{width:34px;height:34px;font-size:18px}.bn-carousel__caption{font-size:.8rem}}
+  </style>
+
   <script type="module">
     function initCarousel(el){
       const imgs = JSON.parse(el.getAttribute('data-images') || '[]');
       const caps = JSON.parse(el.getAttribute('data-captions') || '[]');
-      const imgEl = el.querySelector('.carousel-img');
-      const capEl = el.querySelector('.carousel-caption');
-      const prev = el.querySelector('.carousel-prev');
-      const next = el.querySelector('.carousel-next');
-      let i = 0;
+      if (!imgs.length) return;
+      el.replaceChildren();
+
+      const stage = document.createElement('div');
+      stage.className = 'bn-carousel__stage';
+      const img = document.createElement('img');
+      img.className = 'bn-carousel__img';
+      img.loading = 'lazy';
+      stage.appendChild(img);
+
+      const prev = document.createElement('button');
+      prev.type = 'button';
+      prev.className = 'bn-carousel__btn bn-carousel__btn--prev';
+      prev.setAttribute('aria-label', 'Previous image');
+      prev.textContent = '‹';
+      const next = document.createElement('button');
+      next.type = 'button';
+      next.className = 'bn-carousel__btn bn-carousel__btn--next';
+      next.setAttribute('aria-label', 'Next image');
+      next.textContent = '›';
+      stage.append(prev, next);
+
+      const bar = document.createElement('div');
+      bar.className = 'bn-carousel__bar';
+      const caption = document.createElement('div');
+      caption.className = 'bn-carousel__caption';
+      const nav = document.createElement('div');
+      nav.className = 'bn-carousel__nav';
+      const dots = document.createElement('div');
+      dots.className = 'bn-carousel__dots';
+      const count = document.createElement('span');
+      count.className = 'bn-carousel__count';
+
+      const dotEls = imgs.map((_, idx) => {
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.className = 'bn-carousel__dot';
+        dot.setAttribute('aria-label', `Show image ${idx + 1}`);
+        dot.addEventListener('click', () => { current = idx; render(); });
+        dots.appendChild(dot);
+        return dot;
+      });
+
+      nav.append(dots, count);
+      bar.append(caption, nav);
+      el.append(stage, bar);
+
+      let current = 0;
+      const wrap = (n) => (n + imgs.length) % imgs.length;
       function render(){
-        imgEl.src = imgs[i];
-        if (capEl) capEl.textContent = caps[i] || '';
+        img.src = imgs[current];
+        img.alt = caps[current] || `Image ${current + 1} of ${imgs.length}`;
+        caption.textContent = caps[current] || '';
+        count.textContent = `${current + 1} / ${imgs.length}`;
+        dotEls.forEach((dot, idx) => dot.classList.toggle('bn-carousel__dot--active', idx === current));
+        const single = imgs.length <= 1;
+        prev.style.display = single ? 'none' : '';
+        next.style.display = single ? 'none' : '';
+        dots.style.display = single ? 'none' : '';
       }
-      prev?.addEventListener('click', ()=>{ i = (i - 1 + imgs.length) % imgs.length; render(); });
-      next?.addEventListener('click', ()=>{ i = (i + 1) % imgs.length; render(); });
-      el.setAttribute('tabindex','0');
-      el.addEventListener('keydown', (e)=>{
-        if(e.key==='ArrowLeft'){ i = (i - 1 + imgs.length) % imgs.length; render(); }
-        if(e.key==='ArrowRight'){ i = (i + 1) % imgs.length; render(); }
+
+      prev.addEventListener('click', () => { current = wrap(current - 1); render(); });
+      next.addEventListener('click', () => { current = wrap(current + 1); render(); });
+      el.setAttribute('tabindex', '0');
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft') { current = wrap(current - 1); render(); }
+        if (e.key === 'ArrowRight') { current = wrap(current + 1); render(); }
       });
       render();
     }
-    document.querySelectorAll('.carousel').forEach(initCarousel);
+    document.querySelectorAll('.bn-carousel').forEach(initCarousel);
   </script>
 </BlogPostLayout>
