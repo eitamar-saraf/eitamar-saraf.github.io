@@ -160,89 +160,165 @@ export const frontmatter = {
   <p class="mt-6 text-base md:text-lg text-gray-600">Plots come from representative single runs; they show trends, not error bars. For robustness, average multiple seeds.</p>
 
   <style is:global>
-    .bn-carousel{border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.05)}
-    .bn-carousel:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
-    .bn-carousel__stage{position:relative;display:flex;align-items:center;justify-content:center;background:#f8fafc;aspect-ratio:1200 / 855}
-    .bn-carousel__img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block;margin:0}
-    .bn-carousel__btn{position:absolute;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid #e5e7eb;border-radius:9999px;background:rgba(255,255,255,.9);color:#374151;font-size:22px;line-height:1;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.12);transition:background .15s ease,transform .1s ease}
-    .bn-carousel__btn:hover{background:#fff}
-    .bn-carousel__btn:active{transform:translateY(-50%) scale(.92)}
-    .bn-carousel__btn--prev{left:12px}
-    .bn-carousel__btn--next{right:12px}
-    .bn-carousel__bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border-top:1px solid #e5e7eb;background:#fff}
-    .bn-carousel__caption{font-size:.875rem;color:#4b5563;font-weight:500}
-    .bn-carousel__nav{display:flex;align-items:center;gap:12px}
-    .bn-carousel__dots{display:flex;gap:6px}
-    .bn-carousel__dot{width:8px;height:8px;padding:0;border:0;border-radius:9999px;background:#d1d5db;cursor:pointer;transition:background .15s ease,transform .15s ease}
-    .bn-carousel__dot:hover{background:#9ca3af}
-    .bn-carousel__dot--active{background:#2563eb;transform:scale(1.3)}
-    .bn-carousel__count{font-size:.8rem;color:#6b7280;font-variant-numeric:tabular-nums;white-space:nowrap}
-    @media (max-width:480px){.bn-carousel__btn{width:34px;height:34px;font-size:18px}.bn-carousel__caption{font-size:.8rem}}
+    /* Coverflow carousel — breaks out wider than the blog column so plot text stays legible */
+    .bn-carousel{position:relative;left:50%;transform:translateX(-50%);width:min(1180px,96vw);margin:8px 0}
+    .bn-carousel:focus-visible{outline:none}
+    .bn-cf__viewport{position:relative;overflow:hidden;padding:16px 0}
+    .bn-cf__track{display:flex;align-items:center;gap:22px;transition:transform .42s cubic-bezier(.22,.61,.36,1);will-change:transform}
+    .bn-cf__slide{flex:0 0 auto;width:min(900px,72vw);border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08);transform:scale(.84);opacity:.45;transition:transform .42s cubic-bezier(.22,.61,.36,1),opacity .42s ease,box-shadow .3s ease;cursor:pointer}
+    .bn-cf__slide.is-active{transform:scale(1);opacity:1;box-shadow:0 10px 30px rgba(0,0,0,.18);cursor:zoom-in}
+    .bn-cf__img{display:block;width:100%;height:auto;background:#f8fafc;margin:0}
+    .bn-cf__zoom{position:absolute;top:10px;right:10px;display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:9999px;background:rgba(17,24,39,.72);color:#fff;font-size:.75rem;font-weight:500;opacity:0;transition:opacity .2s ease;pointer-events:none}
+    .bn-cf__slide.is-active:hover .bn-cf__zoom{opacity:1}
+    .bn-cf__btn{position:absolute;top:50%;transform:translateY(-50%);z-index:5;display:flex;align-items:center;justify-content:center;width:46px;height:46px;border:1px solid #e5e7eb;border-radius:9999px;background:rgba(255,255,255,.92);color:#374151;font-size:24px;line-height:1;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.15);transition:background .15s ease,transform .1s ease}
+    .bn-cf__btn:hover{background:#fff}
+    .bn-cf__btn:active{transform:translateY(-50%) scale(.92)}
+    .bn-cf__btn--prev{left:14px}
+    .bn-cf__btn--next{right:14px}
+    .bn-cf__bar{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:12px;flex-wrap:wrap;text-align:center}
+    .bn-cf__caption{font-size:.9rem;color:#4b5563;font-weight:500}
+    .bn-cf__dots{display:flex;gap:7px}
+    .bn-cf__dot{width:9px;height:9px;padding:0;border:0;border-radius:9999px;background:#d1d5db;cursor:pointer;transition:background .15s ease,transform .15s ease}
+    .bn-cf__dot:hover{background:#9ca3af}
+    .bn-cf__dot--active{background:#2563eb;transform:scale(1.3)}
+    .bn-cf__count{font-size:.8rem;color:#6b7280;font-variant-numeric:tabular-nums;white-space:nowrap}
+    @media (max-width:640px){.bn-cf__slide{width:86vw}.bn-cf__btn{width:38px;height:38px;font-size:20px}}
+    /* Lightbox — full-resolution view so axis text is readable */
+    .bn-lb{position:fixed;inset:0;z-index:1000;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.88);padding:24px}
+    .bn-lb.is-open{display:flex}
+    .bn-lb__img{max-width:96vw;max-height:86vh;object-fit:contain;border-radius:8px;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+    .bn-lb__cap{position:absolute;bottom:18px;left:0;right:0;text-align:center;color:#e5e7eb;font-size:.9rem;padding:0 16px}
+    .bn-lb__btn{position:absolute;display:flex;align-items:center;justify-content:center;border:0;border-radius:9999px;background:rgba(255,255,255,.14);color:#fff;cursor:pointer;transition:background .15s ease}
+    .bn-lb__btn:hover{background:rgba(255,255,255,.28)}
+    .bn-lb__close{top:18px;right:20px;width:42px;height:42px;font-size:24px}
+    .bn-lb__nav{top:50%;transform:translateY(-50%);width:52px;height:52px;font-size:30px}
+    .bn-lb__prev{left:20px}
+    .bn-lb__next{right:20px}
   </style>
 
   <script type="module">
+    // Shared full-resolution lightbox, created once and reused by every carousel.
+    const lightbox = (() => {
+      const root = document.createElement('div');
+      root.className = 'bn-lb';
+      const img = document.createElement('img');
+      img.className = 'bn-lb__img';
+      const cap = document.createElement('div');
+      cap.className = 'bn-lb__cap';
+      const close = document.createElement('button');
+      close.type = 'button'; close.className = 'bn-lb__btn bn-lb__close';
+      close.setAttribute('aria-label', 'Close'); close.textContent = '×';
+      const prev = document.createElement('button');
+      prev.type = 'button'; prev.className = 'bn-lb__btn bn-lb__nav bn-lb__prev';
+      prev.setAttribute('aria-label', 'Previous image'); prev.textContent = '‹';
+      const next = document.createElement('button');
+      next.type = 'button'; next.className = 'bn-lb__btn bn-lb__nav bn-lb__next';
+      next.setAttribute('aria-label', 'Next image'); next.textContent = '›';
+      root.append(img, cap, close, prev, next);
+      document.body.appendChild(root);
+
+      let imgs = [], caps = [], i = 0;
+      const wrap = (n) => (n + imgs.length) % imgs.length;
+      function show(){
+        img.src = imgs[i];
+        img.alt = caps[i] || '';
+        cap.textContent = (caps[i] ? `${caps[i]} — ` : '') + `${i + 1} / ${imgs.length}`;
+        const single = imgs.length <= 1;
+        prev.style.display = single ? 'none' : '';
+        next.style.display = single ? 'none' : '';
+      }
+      function closeLb(){ root.classList.remove('is-open'); document.body.style.overflow = ''; }
+      close.addEventListener('click', closeLb);
+      prev.addEventListener('click', (e) => { e.stopPropagation(); i = wrap(i - 1); show(); });
+      next.addEventListener('click', (e) => { e.stopPropagation(); i = wrap(i + 1); show(); });
+      root.addEventListener('click', (e) => { if (e.target === root) closeLb(); });
+      document.addEventListener('keydown', (e) => {
+        if (!root.classList.contains('is-open')) return;
+        if (e.key === 'Escape') closeLb();
+        if (e.key === 'ArrowLeft') { i = wrap(i - 1); show(); }
+        if (e.key === 'ArrowRight') { i = wrap(i + 1); show(); }
+      });
+      return {
+        open(images, captions, index){
+          imgs = images; caps = captions; i = index; show();
+          root.classList.add('is-open'); document.body.style.overflow = 'hidden';
+        }
+      };
+    })();
+
     function initCarousel(el){
       const imgs = JSON.parse(el.getAttribute('data-images') || '[]');
       const caps = JSON.parse(el.getAttribute('data-captions') || '[]');
       if (!imgs.length) return;
       el.replaceChildren();
 
-      const stage = document.createElement('div');
-      stage.className = 'bn-carousel__stage';
-      const img = document.createElement('img');
-      img.className = 'bn-carousel__img';
-      img.loading = 'lazy';
-      stage.appendChild(img);
+      const viewport = document.createElement('div');
+      viewport.className = 'bn-cf__viewport';
+      const track = document.createElement('div');
+      track.className = 'bn-cf__track';
+
+      const slides = imgs.map((src, idx) => {
+        const slide = document.createElement('div');
+        slide.className = 'bn-cf__slide';
+        const img = document.createElement('img');
+        img.className = 'bn-cf__img';
+        img.src = src;
+        img.alt = caps[idx] || `Image ${idx + 1} of ${imgs.length}`;
+        img.loading = 'lazy';
+        img.draggable = false;
+        const zoom = document.createElement('span');
+        zoom.className = 'bn-cf__zoom';
+        zoom.textContent = '⤢ Click to enlarge';
+        slide.append(img, zoom);
+        slide.addEventListener('click', () => {
+          if (idx === current) lightbox.open(imgs, caps, current);
+          else { current = idx; render(); }
+        });
+        track.appendChild(slide);
+        return slide;
+      });
+      viewport.appendChild(track);
 
       const prev = document.createElement('button');
-      prev.type = 'button';
-      prev.className = 'bn-carousel__btn bn-carousel__btn--prev';
-      prev.setAttribute('aria-label', 'Previous image');
-      prev.textContent = '‹';
+      prev.type = 'button'; prev.className = 'bn-cf__btn bn-cf__btn--prev';
+      prev.setAttribute('aria-label', 'Previous image'); prev.textContent = '‹';
       const next = document.createElement('button');
-      next.type = 'button';
-      next.className = 'bn-carousel__btn bn-carousel__btn--next';
-      next.setAttribute('aria-label', 'Next image');
-      next.textContent = '›';
-      stage.append(prev, next);
+      next.type = 'button'; next.className = 'bn-cf__btn bn-cf__btn--next';
+      next.setAttribute('aria-label', 'Next image'); next.textContent = '›';
+      viewport.append(prev, next);
 
-      const bar = document.createElement('div');
-      bar.className = 'bn-carousel__bar';
-      const caption = document.createElement('div');
-      caption.className = 'bn-carousel__caption';
-      const nav = document.createElement('div');
-      nav.className = 'bn-carousel__nav';
-      const dots = document.createElement('div');
-      dots.className = 'bn-carousel__dots';
-      const count = document.createElement('span');
-      count.className = 'bn-carousel__count';
-
+      const bar = document.createElement('div'); bar.className = 'bn-cf__bar';
+      const caption = document.createElement('div'); caption.className = 'bn-cf__caption';
+      const dots = document.createElement('div'); dots.className = 'bn-cf__dots';
+      const count = document.createElement('span'); count.className = 'bn-cf__count';
       const dotEls = imgs.map((_, idx) => {
         const dot = document.createElement('button');
-        dot.type = 'button';
-        dot.className = 'bn-carousel__dot';
+        dot.type = 'button'; dot.className = 'bn-cf__dot';
         dot.setAttribute('aria-label', `Show image ${idx + 1}`);
         dot.addEventListener('click', () => { current = idx; render(); });
         dots.appendChild(dot);
         return dot;
       });
-
-      nav.append(dots, count);
-      bar.append(caption, nav);
-      el.append(stage, bar);
+      bar.append(caption, dots, count);
+      el.append(viewport, bar);
 
       let current = 0;
       const wrap = (n) => (n + imgs.length) % imgs.length;
+      function center(){
+        const slide = slides[current];
+        const offset = slide.offsetLeft + slide.offsetWidth / 2 - viewport.clientWidth / 2;
+        track.style.transform = `translateX(${-offset}px)`;
+      }
       function render(){
-        img.src = imgs[current];
-        img.alt = caps[current] || `Image ${current + 1} of ${imgs.length}`;
+        slides.forEach((s, idx) => s.classList.toggle('is-active', idx === current));
+        dotEls.forEach((d, idx) => d.classList.toggle('bn-cf__dot--active', idx === current));
         caption.textContent = caps[current] || '';
         count.textContent = `${current + 1} / ${imgs.length}`;
-        dotEls.forEach((dot, idx) => dot.classList.toggle('bn-carousel__dot--active', idx === current));
         const single = imgs.length <= 1;
         prev.style.display = single ? 'none' : '';
         next.style.display = single ? 'none' : '';
         dots.style.display = single ? 'none' : '';
+        center();
       }
 
       prev.addEventListener('click', () => { current = wrap(current - 1); render(); });
@@ -252,6 +328,18 @@ export const frontmatter = {
         if (e.key === 'ArrowLeft') { current = wrap(current - 1); render(); }
         if (e.key === 'ArrowRight') { current = wrap(current + 1); render(); }
       });
+
+      // Image sizes change layout as they load; recenter then and on resize.
+      slides.forEach((s) => {
+        const im = s.querySelector('img');
+        if (!im.complete) im.addEventListener('load', center, { once: true });
+      });
+      let scheduled;
+      window.addEventListener('resize', () => {
+        cancelAnimationFrame(scheduled);
+        scheduled = requestAnimationFrame(center);
+      });
+
       render();
     }
     document.querySelectorAll('.bn-carousel').forEach(initCarousel);
