@@ -8,15 +8,16 @@ export const frontmatter = {
 ---
 
 <BlogPostLayout frontmatter={frontmatter}>
-  <p class="mb-6 text-gray-700">A clear, visual walkthrough of what Batch Normalization (BN) does inside a network—why it lets you train faster and safer—grounded in side‑by‑side plots from the same experiments.</p>
+  <p class="mb-6 text-gray-700">Batch Normalization (BN) shows up in almost every modern neural network, usually with little explanation of <i>why</i> it helps. This is a visual, beginner-friendly walkthrough. We train the same small image classifier twice—once with BN, once without—and watch what happens to the numbers flowing through the network. If you've seen a basic neural network and gradient descent, you have enough background to follow along.</p>
 
   <div class="mb-6 p-4 rounded border bg-blue-50 text-blue-900">
-    <b>TL;DR.</b> BN recenters/rescales each batch (then learns <i>γ</i>, <i>β</i>), keeping activations in a friendly range. In our runs it boosts validation accuracy and calms training noise—most dramatically at lr=0.2 (≈ 89.2% with BN vs ≈ 75.1% without).
+    <b>TL;DR.</b> BN takes the numbers inside each layer and, for every mini-batch, rescales them to a tidy range (roughly mean 0, spread 1), then lets the network learn two small parameters (<i>γ</i>, <i>β</i>) to readjust if needed. In our experiment this made training much more stable and accurate—most dramatically at a high learning rate (lr = 0.2), where the BN model reached ≈ 89% accuracy versus ≈ 75% without it.
   </div>
 
   <section class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">What BatchNorm actually does</h2>
-    <p class="text-gray-700 mb-3">For each feature channel in a mini‑batch, BatchNorm (BN) computes a mean and variance, normalizes the activations to zero mean / unit variance, then applies a learnable affine transform so the network can still represent any needed distribution. During training these statistics are per‑batch; during inference it uses running (exponentially averaged) estimates gathered while training.</p>
+    <p class="text-gray-700 mb-3">A few terms first. When you train a network you don't feed it one example at a time but a small group at once—a <b>mini-batch</b> (128 images here). As data passes through a layer it produces <b>activations</b> (the layer's output numbers), and in a convolutional layer these are organized into <b>channels</b> (feature maps). For each channel, BN looks at all the activations in the current mini-batch, computes their mean and variance, and standardizes them to mean 0 / variance 1. It then applies a learnable <b>scale</b> (<i>γ</i>) and <b>shift</b> (<i>β</i>), so the network can adjust or even undo the normalization if that turns out to help. During training it uses each batch's own statistics; at test time it switches to a running average collected during training, so a prediction doesn't depend on which other images happen to share its batch.</p>
+    <p class="text-gray-700 mb-3">In symbols, for one channel <code>c</code> with <code>m</code> examples in the batch:</p>
     <div class="bg-white rounded border p-4 mb-4 text-base md:text-lg leading-relaxed">
       <b>Per channel c:</b><br/>
       <code>μ<sub>c</sub> = (1/m) Σ<sub>i=1..m</sub> x<sub>i,c</sub></code><br/>
@@ -40,21 +41,21 @@ export const frontmatter = {
       </div>
     </details>
     <div class="p-4 rounded border bg-emerald-50 text-emerald-900 text-sm md:text-base">
-      <b>Why it helps:</b> (1) prevents activation scale drift, (2) smooths the optimization landscape so gradients behave more predictably, (3) allows larger learning rates, (4) adds a mild regularization effect via batch noise.
+      <b>Why it helps (the intuition):</b> (1) it stops activations from slowly growing or shrinking out of control as they pass through many layers; (2) it makes the optimization surface smoother, so each gradient step is more predictable; (3) because of that, you can safely use a larger learning rate and train faster; (4) each batch's statistics are slightly random, which adds a little noise that acts like mild regularization (similar in spirit to dropout).
     </div>
-    <p class="mt-3 text-sm md:text-base text-gray-600">A note on mechanism: BN's benefit was historically explained as reducing <i>internal covariate shift</i> (ICS). That story is now contested—Santurkar et al. (2018), <i>How Does Batch Normalization Help Optimization?</i>, found BN does not actually reduce ICS and that its main effect is smoothing the loss landscape (making the loss and gradients more Lipschitz). The diagnostics below show <i>what</i> BN changes in the signals; treat the ICS-style narrative as intuition, not a proven cause.</p>
+    <p class="mt-3 text-sm md:text-base text-gray-600"><b>A note on the "why".</b> The original BN paper explained the benefit as reducing <i>internal covariate shift</i> (ICS)—the idea that, as earlier layers keep updating, the distribution of inputs to later layers keeps shifting, forcing them to constantly readapt. That story is intuitive and still widely repeated, but later work (Santurkar et al., 2018, <i>How Does Batch Normalization Help Optimization?</i>) showed it is largely wrong: BN doesn't really reduce this shift, and its main effect is making the loss surface smoother and easier to optimize. So read the plots below as showing <i>what</i> BN changes in the signals—not as proof of the textbook "covariate shift" explanation.</p>
   </section>
 
   <section class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-2">The cast and the stage</h2>
     <ul class="list-disc list-inside text-gray-700 space-y-1">
       <li><b>Data:</b> CIFAR‑10 (32×32), light aug (crop/flip).</li>
-      <li><b>Model:</b> A 5‑block CNN (Conv→ReLU, BN only in the BN variant) + a small head.</li>
-      <li><b>Training:</b> Same init/opt/schedule; we compare lr=0.02 and lr=0.2.</li>
+      <li><b>Model:</b> a small 5-block convolutional network. Each block is convolution → ReLU; the BN version adds a BN layer right before each ReLU. A small linear classifier (the "head") sits on top.</li>
+      <li><b>Training:</b> everything is identical between the two models—same starting weights, same optimizer, same schedule—except whether BN is on. We try two learning rates: a gentle one (lr = 0.02) and an aggressive one (lr = 0.2). The <b>learning rate</b> is how big a step the optimizer takes per update; BN's advantage is easiest to see when we push it hard.</li>
     </ul>
-    <p class="mt-3 text-gray-600 text-base md:text-lg">Goal: not SOTA—just a clean lens into how BN changes internal signals.</p>
+    <p class="mt-3 text-gray-600 text-base md:text-lg">The goal isn't a record-breaking accuracy—it's a clean look at how BN changes the signals inside the network.</p>
     <div class="mt-4 p-3 rounded border bg-gray-50 text-gray-700 text-sm md:text-base">
-      <b>How to read these plots.</b> The probes sit on the <i>input to each ReLU</i>—which in the BN model is the BN layer's output—so "BN centers the signal" is partly true by construction; the value is in the side-by-side contrast with the No-BN model. Per-block gradient and update magnitudes aggregate every parameter in a block, and the two models don't share an identical parameter set (BN adds <i>γ</i>, <i>β</i>), so read those as <i>trends</i>, not exact head-to-head numbers. Results come from a single seed, and the "validation" split here is CIFAR-10's test set.
+      <b>How to read these plots.</b> Each plot is measured at the <i>input to a ReLU</i>, which in the BN model is the BN layer's output—so "BN centers the signal" is partly true by design; the interesting part is how messy the no-BN model gets in comparison. The gradient and update plots add up every parameter in a block, and the two models don't have exactly the same parameters (BN adds <i>γ</i>, <i>β</i>), so compare the <i>shape and steadiness</i> of the curves rather than exact heights. Everything comes from a single training run (one random seed), and the "validation" numbers are measured on CIFAR-10's test set. When we quote a <b>median</b> it's the typical value over training, <b>p95</b> is a near-worst case (the 95th percentile), and a <b>band</b> is the range most values fall in.
     </div>
   </section>
 
@@ -63,7 +64,7 @@ export const frontmatter = {
     <figure class="bg-white rounded border p-2 mb-2">
       <img src="/plots/bn/val acc compare.png" alt="Validation accuracy comparison BN vs No‑BN across learning rates" class="w-full rounded" />
     </figure>
-    <p class="text-gray-700">BN climbs faster and finishes higher, especially when we push lr to 0.2.</p>
+    <p class="text-gray-700">Each curve is accuracy over the course of training. The BN models climb faster and finish higher—and at the aggressive learning rate (lr = 0.2) the no-BN model barely gets off the ground.</p>
     <div class="mt-3 text-base md:text-lg text-gray-700">
       <b>Numbers:</b> lr=0.2 → <span class="text-emerald-700">BN 89.19%</span> vs <span class="text-rose-700">No‑BN 75.14%</span>; lr=0.02 → BN 85.94% vs No‑BN 70.91%.
     </div>
@@ -73,7 +74,7 @@ export const frontmatter = {
 
   <section class="mt-12">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Episode 1 — Activation drift</h2>
-<p class="text-gray-700 mb-3">Pre‑ReLU activations are the raw material the next layer receives. When their mean stays near 0 and their variance stays in a moderate band, gradients propagate more predictably and weight updates remain proportional. If the mean drifts away from 0 or the variance balloons, later layers keep adapting to a shifting distribution—training feels like trying to hit a moving target.</p>
+<p class="text-gray-700 mb-3">Just before each ReLU, a block produces a set of numbers we'll call the <b>pre-activations</b>—the raw material the ReLU and the next block work with. A healthy sign is that their average stays near 0 and their spread (standard deviation) stays moderate and steady. If the average drifts far from 0, or the spread keeps growing, every later layer has to keep readjusting to a moving target, which makes learning harder. The two carousels below show the mean and the standard deviation of these pre-activations, block by block, over training.</p>
     <div class="mb-4">
       <div class="not-prose bn-carousel" data-images='["/plots/bn/act mean pre relu block 1.png","/plots/bn/act mean pre relu block 2.png","/plots/bn/act mean pre relu block 3.png","/plots/bn/act mean pre relu block 4.png","/plots/bn/act mean pre relu block 5.png"]' data-captions='["Mean (pre‑ReLU), block 1","Mean (pre‑ReLU), block 2","Mean (pre‑ReLU), block 3","Mean (pre‑ReLU), block 4","Mean (pre‑ReLU), block 5"]'></div>
     </div>
@@ -81,51 +82,51 @@ export const frontmatter = {
       <div class="not-prose bn-carousel" data-images='["/plots/bn/act std pre relu block 1.png","/plots/bn/act std pre relu block 2.png","/plots/bn/act std pre relu block 3.png","/plots/bn/act std pre relu block 4.png","/plots/bn/act std pre relu block 5.png"]' data-captions='["Std (pre‑ReLU), block 1","Std (pre‑ReLU), block 2","Std (pre‑ReLU), block 3","Std (pre‑ReLU), block 4","Std (pre‑ReLU), block 5"]'></div>
     </div>
     <div class="p-4 rounded border bg-amber-50 text-amber-900">
-      <b>What to look for:</b> With No‑BN at lr=0.2, deeper blocks’ means drift (e.g., block5 |μ| median ≈ 2.31, p95 ≈ 4.47) and std broadens (≈ 0.86–2.23). BN keeps means near 0 (≤ ~0.43) and std tighter (≈ 0.35–0.70).
+      <b>What to look for:</b> without BN at lr = 0.2, the deeper blocks drift—in block 5 the average pulls away from 0 (typical magnitude ≈ 2.3, with spikes past 4) and the spread swells (≈ 0.9–2.2). With BN, the average stays pinned near 0 (under ~0.4) and the spread stays tight (≈ 0.35–0.70). Keep in mind BN sits right before this measurement, so it's expected to look tidy here; the takeaway is how far the no-BN version wanders.
     </div>
   </section>
 
   <section class="mt-12">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Episode 2 — Dead activations</h2>
-<p class="text-gray-700 mb-3">ReLU gates negative inputs to zero. If pre‑ReLU distributions slide far below zero, large swaths of units stop firing and stop receiving gradient—capacity shrinks and learning slows. Centering via BN maintains a healthier balance of active/inactive units, especially in shallower layers where gradients originate for deep stacks.</p>
+<p class="text-gray-700 mb-3">ReLU sets every negative input to 0. That's fine in moderation, but if a unit's pre-activations sit mostly below 0, it outputs 0 most of the time—and a unit stuck at 0 passes almost no gradient backward, so it barely learns. The plot shows the fraction of pre-activations below 0 (the share ReLU zeroes out) for each block. By keeping pre-activations centered near 0, BN preserves a healthier mix of "firing" and "silent" units. (This is measured per batch, so it's about momentary sparsity, not units that are permanently dead.)</p>
     <div class="mb-6">
       <div class="not-prose bn-carousel" data-images='["/plots/bn/fraction inactive pre relu block 1.png","/plots/bn/fraction inactive pre relu block 2.png","/plots/bn/fraction inactive pre relu block 3.png","/plots/bn/fraction inactive pre relu block 4.png","/plots/bn/fraction inactive pre relu block 5.png"]' data-captions='["Inactive fraction, block 1","Inactive fraction, block 2","Inactive fraction, block 3","Inactive fraction, block 4","Inactive fraction, block 5"]'></div>
     </div>
     <div class="p-4 rounded border bg-gray-50 text-gray-800">
-      <b>Numbers:</b> lr=0.2 medians (block1→block5) — BN ≈ 0.41, 0.70, 0.70, 0.88, 0.62 vs No‑BN ≈ 0.65, 0.95, 0.85, 0.90, 0.92. At lr=0.02 the gap narrows but deep layers still get sparser without BN.
+      <b>By the numbers:</b> at lr = 0.2, the typical inactive fraction per block (1→5) is about 0.41, 0.70, 0.70, 0.88, 0.62 with BN versus 0.65, 0.95, 0.85, 0.90, 0.92 without—so the no-BN network silences far more of its units, especially in the deeper blocks. At the gentle lr = 0.02 the gap shrinks but is still there.
     </div>
   </section>
 
   <section class="mt-12">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Episode 3 — Gradient noise</h2>
-<p class="text-gray-700 mb-3">Optimizers prefer smooth, comparable gradient magnitudes across depth. When gradients spike or jitter layer‑to‑layer, step sizes become inconsistent: some layers thrash while others barely move. BN curbs activation scale drift, which reduces these downstream gradient oscillations and keeps updates in a steadier envelope.</p>
+<p class="text-gray-700 mb-3">During backpropagation, each layer receives a gradient that tells it how to change its weights; the <b>gradient norm</b> is simply the size of that signal. Ideally the sizes are similar across depth and don't swing wildly from step to step—otherwise some layers take huge steps while others barely move. The plot tracks the gradient norm per block over training; BN tends to keep these sizes steadier.</p>
     <div class="mb-6">
       <div class="not-prose bn-carousel" data-images='["/plots/bn/grad norm block 1.png","/plots/bn/grad norm block 2.png","/plots/bn/grad norm block 3.png","/plots/bn/grad norm block 4.png","/plots/bn/grad norm block 5.png","/plots/bn/grad norm head.png"]' data-captions='["Grad norm, block 1","Grad norm, block 2","Grad norm, block 3","Grad norm, block 4","Grad norm, block 5","Grad norm, head"]'></div>
     </div>
     <div class="p-4 rounded border bg-rose-50 text-rose-900">
-      <b>Look closely:</b> At lr=0.2, the head and deeper blocks jitter and spike more without BN. Median bands: BN ≈ 0.29–0.50 vs No‑BN ≈ 0.46–0.64. Fewer sharp jumps → steadier steps.
+      <b>Look closely:</b> at lr = 0.2 the no-BN curves—especially the head and deeper blocks—jump around and spike more, while the BN curves stay in a calmer range (typical sizes ≈ 0.29–0.50 with BN vs ≈ 0.46–0.64 without). These are raw magnitudes and BN slightly changes which parameters a block contains, so focus on how steady each curve is rather than the exact heights.
     </div>
   </section>
 
   <section class="mt-12">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Episode 4 — Update scale</h2>
-<p class="text-gray-700 mb-3">Relative update size ||ΔW||/||W|| is a sanity check: too small and progress stalls, too large and you zig‑zag. For deep nets, consistency across blocks matters—otherwise earlier layers creep while later layers whip back and forth. By taming activation/gradient scale, BN makes relative update sizes cluster into a tighter, safer band.</p>
+<p class="text-gray-700 mb-3">A handy sanity check is the <b>relative update size</b>: how much a block's weights change in one step compared with how big they already are (written ‖ΔW‖ / ‖W‖). Too small and the layer is barely learning; too large and it's lurching around. You'd also like it to be roughly similar across blocks, so no single layer dominates. BN tends to pull these into a tighter, more uniform range.</p>
     <div class="mb-6">
       <div class="not-prose bn-carousel" data-images='["/plots/bn/rel update size block 1.png","/plots/bn/rel update size block 2.png","/plots/bn/rel update size block 3.png","/plots/bn/rel update size block 4.png","/plots/bn/rel update size block 5.png","/plots/bn/rel update size head.png"]' data-captions='["Rel. update size, block 1","Rel. update size, block 2","Rel. update size, block 3","Rel. update size, block 4","Rel. update size, block 5","Rel. update size, head"]'></div>
     </div>
     <div class="p-4 rounded border bg-gray-50 text-gray-800">
-      <b>Numbers:</b> lr=0.2 medians — BN ≈ 0.0080–0.0089 (tight); No‑BN ≈ 0.0060–0.0072. At lr=0.02 the bands are comparable, BN slightly more uniform with depth.
+      <b>By the numbers:</b> at lr = 0.2 the BN updates sit in a tight range (~0.008–0.009), while the no-BN updates are smaller and more uneven (~0.006–0.007). At lr = 0.02 the two are similar, with BN a bit more uniform across depth.
     </div>
   </section>
 
   <section class="mt-12">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Episode 5 — Batch‑to‑batch shift</h2>
-<p class="text-gray-700 mb-3">From one mini‑batch to the next, the input distribution each layer sees can wiggle. If that wiggle is large, the optimizer is effectively chasing a target that keeps sliding around—wasting steps. BN damps those per‑batch fluctuations so each step sees a more stationary distribution and makes steadier progress.</p>
+<p class="text-gray-700 mb-3">Each layer sees a slightly different input from one mini-batch to the next. We measure how much a block's average activation jumps between consecutive batches—call it the <b>batch-to-batch shift</b>. Big jumps mean the optimizer is partly chasing a moving target and wasting steps. BN dampens these jumps, so each step sees a more consistent picture.</p>
     <div class="mb-6">
       <div class="not-prose bn-carousel" data-images='["/plots/bn/batch to batch act shift bn-lr0.02.png","/plots/bn/batch to batch act shift Nobn-lr0.02.png","/plots/bn/batch to batch act shift bn-lr0.2.png","/plots/bn/batch to batch act shift Nobn-lr0.2.png"]' data-captions='["BN, lr=0.02","No‑BN, lr=0.02","BN, lr=0.2","No‑BN, lr=0.2"]'></div>
     </div>
     <div class="p-4 rounded border bg-emerald-50 text-emerald-900">
-      <b>Numbers:</b> Mean shift over training — lr=0.2 → BN 0.014 vs No‑BN 0.225; lr=0.02 → BN 0.023 vs No‑BN 0.085.
+      <b>By the numbers:</b> the average shift over training at lr = 0.2 is about 0.014 with BN versus 0.225 without—roughly 16× smaller. At lr = 0.02 it's 0.023 vs 0.085.
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start mt-6">
       <figure class="bg-white rounded border p-2">
@@ -138,17 +139,18 @@ export const frontmatter = {
       </figure>
     </div>
     <div class="p-4 rounded border bg-gray-50 text-gray-800 mt-3">
-      <b>Same LR, different fate (lr=0.2):</b> the No‑BN run shows much larger batch‑to‑batch shift (≈ 0.225) and stalls near 75%, while BN's is far smaller (≈ 0.014) and it climbs to ~89%. The two move together here—but this is a correlation in a single run, and reduced shift isn't established as the underlying cause (see the mechanism note above).
+      <b>Same learning rate, very different outcome (lr = 0.2):</b> the no-BN run has much larger batch-to-batch shift (≈ 0.225) and stalls near 75% accuracy, while the BN run is far steadier (≈ 0.014) and reaches ~89%. They clearly move together—but this is a single run, and "less shift" has not been shown to be the <i>cause</i> (recall the note above: the better-supported reason is a smoother loss surface).
     </div>
   </section>
 
   <section class="mt-12">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Takeaways</h2>
     <ul class="list-disc list-inside text-gray-700 space-y-1">
-      <li>BN centers and scales signals so gradients flow in a steadier band.</li>
-      <li>It reduces batch‑to‑batch volatility, making high LR more forgiving.</li>
-      <li>Deeper layers benefit most; No‑BN tends to drift and get noisier there.</li>
-      <li>Very small batches can make BN stats noisy—then try GroupNorm/LayerNorm, or tune BN momentum/LR.</li>
+      <li>BN rescales the signals inside each layer, keeping activations and gradients in a steadier range.</li>
+      <li>That stability lets you use a larger learning rate and train faster, with less babysitting.</li>
+      <li>Deep layers benefit most—without BN they're the first to drift and get noisy.</li>
+      <li>BN's real benefit probably isn't about "covariate shift"; the better-supported explanation is a smoother, easier-to-optimize loss surface.</li>
+      <li>Heads-up: BN relies on batch statistics, so very small batches make it noisy. In that case try GroupNorm or LayerNorm, which don't depend on batch size.</li>
     </ul>
   </section>
 
@@ -157,7 +159,7 @@ export const frontmatter = {
     <a href="https://github.com/eitamar-saraf/BN-vs-NonBN" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-5 py-3 rounded border text-blue-700 hover:bg-blue-50 text-base md:text-lg">Repository</a>
   </div>
 
-  <p class="mt-6 text-base md:text-lg text-gray-600">Plots come from representative single runs; they show trends, not error bars. For robustness, average multiple seeds.</p>
+  <p class="mt-6 text-base md:text-lg text-gray-600">A caveat to keep you honest: these plots come from a single training run each, so they show trends, not error bars. For a claim you could rely on, you'd repeat the experiment with several random seeds and average the results.</p>
 
   <style is:global>
     /* Coverflow carousel — breaks out wider than the blog column so plot text stays legible */
