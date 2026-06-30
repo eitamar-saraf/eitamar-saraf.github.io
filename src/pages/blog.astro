@@ -7,6 +7,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     <h1 class="text-3xl font-bold mb-6">Blog</h1>
     <p class="mb-8 text-gray-700">Read my latest posts and interactive machine learning demos.</p>
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <a href="/blog/batchnorm-poisoning" class="group block rounded-xl overflow-hidden border bg-white shadow-sm hover:shadow-md transition-shadow">
+        <div class="h-32 sm:h-36 md:h-40 bg-gray-100 overflow-hidden flex items-center justify-center">
+          <img src="/plots/batchnorm-poisoning/card.png" alt="running_var and eval score on one plot, moving as mirror images" class="max-h-full max-w-full object-contain group-hover:scale-[1.02] transition-transform duration-200" loading="lazy" />
+        </div>
+        <div class="p-4">
+          <h2 class="text-lg font-semibold mb-1">When One Giant Sample Breaks BatchNorm</h2>
+          <p class="text-sm text-gray-600">A hidden BatchNorm buffer, poisoned by scale outliers, swung my eval 30 points between checkpoints — and three ways to fix it.</p>
+        </div>
+      </a>
+
       <a href="/blog/xor" class="group block rounded-xl overflow-hidden border bg-white shadow-sm hover:shadow-md transition-shadow">
         <div class="h-32 sm:h-36 md:h-40 bg-gray-100 overflow-hidden flex items-center justify-center">
           <img src="/plots/xor/12_poly2_logreg_boundary.png" alt="XOR demo preview" class="max-h-full max-w-full object-contain group-hover:scale-[1.02] transition-transform duration-200" loading="lazy" />

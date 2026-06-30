@@ -1,0 +1,135 @@
+---
+import BlogPostLayout from '../../layouts/BlogPostLayout.astro';
+
+export const frontmatter = {
+  title: 'When One Giant Sample Breaks BatchNorm',
+  pubDate: '2026-06-30',
+};
+---
+
+<BlogPostLayout frontmatter={frontmatter}>
+  <p class="mb-6 text-gray-700">A 3D point-cloud retrieval model I was training had a maddening symptom: its evaluation score swung by ~30 points between checkpoints saved just minutes apart — great, then broken, then great again — while the training loss curve looked perfectly smooth the whole time. The culprit turned out to be a single buffer inside <b>BatchNorm</b> that the loss never sees, poisoned by a handful of extreme-scale training samples. This post reproduces the whole thing from scratch on synthetic data, and walks through three fixes. If you know roughly what BatchNorm and a training loop are, you have enough to follow along.</p>
+
+  <div class="mb-6 p-4 rounded border bg-blue-50 text-blue-900">
+    <b>TL;DR.</b> BatchNorm keeps a hidden <code>running_var</code> buffer that it uses at eval time. It updates by a running average of per-batch variance — <i>not</i> by gradient descent — so the loss is blind to it. A few giant-scale outliers (think a building modeled in millimeters) blow up the variance of the first conv layer; whichever checkpoint you save right after such a batch divides every clean input by a hugely inflated number and collapses. Swapping BatchNorm for <b>GroupNorm</b> removes the buffer and the instability — but it also erases the model's sense of absolute scale, so I had to add that back explicitly with a small <b>FiLM</b> conditioning path.
+  </div>
+
+  <section class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">The symptom: a see-saw the loss can't see</h2>
+    <p class="text-gray-700 mb-3">Here is the clearest single view of the bug. The model trains fine — on the clean checkpoints its retrieval score (blue) climbs to a healthy baseline. But overlay BatchNorm's <code>running_var</code> buffer (red, log scale) and the two are mirror images: <b>every spike in the buffer is a collapse in the score, and vice-versa</b> (Pearson correlation ≈ −0.77). The shaded bands mark the poisoned checkpoints. And the third line tells the story: the <b>training loss</b> (gray, dashed) glides smoothly down, ignoring the eval collapses entirely — with one telling exception. The lone loss spike (around step 530) is the single step where an outlier actually lands in the training batch; BatchNorm's per-batch normalization gets dominated by it and the loss jumps for that one step, then immediately recovers. That's the asymmetry that makes this bug so nasty: the loss feels an outlier for <i>one</i> step, but <code>running_var</code> is an accumulated average, so a single bad batch leaves it poisoned for dozens of steps — which is what wrecks the next several checkpoints.</p>
+    <figure class="bg-white rounded border p-2 mb-2">
+      <img src="/plots/batchnorm-poisoning/bn_anticorrelation.png" alt="running_var and eval MRR on one plot: every running_var spike coincides with an MRR collapse" class="w-full rounded" />
+    </figure>
+    <p class="text-gray-600 text-base md:text-lg">If you only watch the loss, this is invisible. If you eval every few hundred steps, you get a "good checkpoint / bad checkpoint" lottery with no obvious cause.</p>
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">The hidden buffer</h2>
+    <p class="text-gray-700 mb-3">BatchNorm does two different things depending on the mode. During <b>training</b> it standardizes each feature using the mean and variance of <i>the current mini-batch</i>. During <b>evaluation</b> it can't depend on whatever other examples happen to share the batch, so it instead uses a fixed pair of buffers — <code>running_mean</code> and <code>running_var</code> — that it accumulated during training as an exponential moving average:</p>
+    <div class="bg-white rounded border p-4 mb-4 text-base md:text-lg leading-relaxed">
+      <b>train step:</b> <code>x̂ = (x − μ<sub>batch</sub>) / √(σ²<sub>batch</sub> + ε)</code><br/>
+      <b>buffer update:</b> <code>running_var ← (1−m)·running_var + m·σ²<sub>batch</sub></code><br/>
+      <b>eval:</b> <code>x̂ = (x − running_mean) / √(running_var + ε)</code>
+    </div>
+    <div class="p-4 rounded border bg-amber-50 text-amber-900">
+      <b>The crucial detail:</b> that buffer update is a plain moving average of batch statistics — it is <b>not driven by the gradient</b>. No loss term pushes on it. So the optimizer, the loss curve, and gradient-norm dashboards are all completely blind to it. One pathological batch can shove <code>running_var</code> orders of magnitude off, and nothing in training "notices."
+    </div>
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">Why a few outliers poison it</h2>
+    <p class="text-gray-700 mb-3">My point clouds are normalized by a <b>single dataset-wide divisor</b> rather than per-sample. That's deliberate: I want a 3&nbsp;mm part and a 4&nbsp;mm part to stay <i>different</i> after normalization, because absolute size is a real, discriminative feature. The cost is that there's <b>no per-sample clamp</b>: an object that is genuinely enormous (a building uploaded in millimeters, or a unit-error model) keeps enormous coordinates after "normalization".</p>
+    <p class="text-gray-700 mb-3">The first convolution turns large coordinates into large activations, and variance grows with the <i>square</i> of the spread. The left panel below shows the distribution of per-sample extent (how far the coordinates reach after normalization) on a <b>log₁₀</b> axis: a healthy bulk at log₁₀ ≈ 0 (extent ≈ 1), with a detached tail of outliers out near log₁₀ ≈ 3–4 — that is, extent in the <b>thousands to ten-thousands</b>. The right panel plots the resulting first-layer variance against the raw extent (both axes log-scaled) — a clean <code>variance ∝ extent²</code> line, with the tail samples sitting at variances five to eight orders of magnitude above the bulk.</p>
+    <figure class="bg-white rounded border p-2 mb-2">
+      <img src="/plots/batchnorm-poisoning/data_diagnostic.png" alt="Left: histogram of per-sample extent with a long outlier tail. Right: first-conv variance grows as extent squared." class="w-full rounded" />
+    </figure>
+    <p class="text-gray-700">When one of those tail samples lands in a batch, the batch variance is dominated by it, the moving average drinks it in, and <code>running_var</code> spikes. At the next eval, every clean input gets divided by that inflated variance, the embedding collapses, and retrieval falls to chance — until enough clean batches pass for the moving average to recover. That's the see-saw.</p>
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">Three fixes, one experiment</h2>
+    <p class="text-gray-700 mb-3">I trained the same small encoder four ways. The first is the bug; the next three are progressively better fixes. <code>global</code> means the shared-divisor normalization above; <code>unitbb</code> means per-sample unit-box normalization (every object rescaled into the same cube — which throws away absolute scale on purpose).</p>
+
+    <div class="overflow-x-auto mb-4">
+      <table class="w-full text-sm md:text-base border-collapse">
+        <thead><tr class="border-b text-left">
+          <th class="py-2 pr-4">variant</th><th class="py-2 pr-4">stable?</th><th class="py-2 pr-4">knows scale?</th><th class="py-2">verdict</th>
+        </tr></thead>
+        <tbody class="text-gray-700">
+          <tr class="border-b"><td class="py-2 pr-4"><code>global + BN</code></td><td class="py-2 pr-4">❌</td><td class="py-2 pr-4">yes</td><td class="py-2">the bug — running_var poisoned, eval swings 30 pts</td></tr>
+          <tr class="border-b"><td class="py-2 pr-4"><code>global + GroupNorm</code></td><td class="py-2 pr-4">✅</td><td class="py-2 pr-4">partly</td><td class="py-2">no buffer, so no poisoning — already a big win</td></tr>
+          <tr class="border-b"><td class="py-2 pr-4"><code>unitbb + GroupNorm</code></td><td class="py-2 pr-4">✅</td><td class="py-2 pr-4">❌ <b>no</b></td><td class="py-2">stable but scale-blind: can't tell 3 mm from 4 mm</td></tr>
+          <tr><td class="py-2 pr-4"><code>unitbb + GroupNorm + FiLM</code></td><td class="py-2 pr-4">✅</td><td class="py-2 pr-4">✅ <b>yes</b></td><td class="py-2">stable <i>and</i> scale-aware — the full fix</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <figure class="bg-white rounded border p-2 mb-2">
+      <img src="/plots/batchnorm-poisoning/four_variants.png" alt="Four-panel comparison: running_var, eval MRR, embedding-collapse indicator, and size discrimination across the four variants." class="w-full rounded" />
+    </figure>
+
+    <p class="text-gray-700 mb-3"><b>GroupNorm</b> (orange) is the obvious fix: it normalizes <i>within each sample</i> instead of across the batch, so it keeps no running buffer at all — train and eval behave identically, and the see-saw disappears. If you only care about stability, you can stop here.</p>
+
+    <div class="p-4 rounded border bg-emerald-50 text-emerald-900 mb-3">
+      <b>The subtle catch.</b> Removing the running buffer is what fixed the <i>stability</i>. But GroupNorm comes bundled with a second, separate property: like every per-sample normalization (LayerNorm, InstanceNorm too) it is <b>scale-invariant by construction</b> (<code>norm(s·x) = norm(x)</code>), so it cannot represent absolute scale on its own. <code>global + GroupNorm</code> still looks partly scale-aware above (0.35) only because the <i>global</i> normalization smuggles a little scale into the raw coordinates — a weak, leaky signal. The moment you switch to the cleaner per-sample <b>unit-box</b> normalization — the version that fully tames the outliers — that smuggled signal is gone too: a 3&nbsp;mm and a 4&nbsp;mm version of the same shape become <i>identical inputs before the network even sees them</i>. The bottom-right panel makes it concrete: <code>unitbb + GroupNorm</code> (blue) scores <b>0.00</b> on telling them apart. Stable, but blind.
+    </div>
+
+    <h3 class="text-2xl font-bold mt-8 mb-2">Why only <i>partly</i>? Where the leak comes from</h3>
+    <p class="text-gray-700 mb-3">It's worth seeing exactly why <code>global + GroupNorm</code> keeps a <i>little</i> scale (0.35) when GroupNorm is supposedly scale-invariant. The first conv produces, per channel, a <b>geometry part that scales with the object's size <code>s</code></b>, plus a <b>fixed offset <code>c</code></b> from the constant color (0.4) and the layer's bias — and crucially <code>c</code> is the <i>same</i> for a 3&nbsp;mm and a 4&nbsp;mm object (identical color). GroupNorm then z-scores each patch: subtract the group mean, divide by the group std. The whole question is whether <code>s</code> survives that. Follow it down each branch:</p>
+
+    <div class="overflow-x-auto mb-3">
+      <table class="w-full text-sm md:text-base border-collapse">
+        <thead><tr class="border-b text-left">
+          <th class="py-2 pr-4">GroupNorm step</th>
+          <th class="py-2 pr-4">with the anchor &nbsp;<span class="font-normal text-gray-500">(real <code>global+GN</code>)</span></th>
+          <th class="py-2">no anchor &nbsp;<span class="font-normal text-gray-500">(pure scaling)</span></th>
+        </tr></thead>
+        <tbody class="text-gray-700 align-top">
+          <tr class="border-b"><td class="py-2 pr-4">conv output <code>v</code></td><td class="py-2 pr-4"><code>s·a + c</code></td><td class="py-2"><code>s·a</code></td></tr>
+          <tr class="border-b"><td class="py-2 pr-4">− group mean</td><td class="py-2 pr-4"><code>s·(a − mean a) + (c − mean c)</code></td><td class="py-2"><code>s·(a − mean a)</code></td></tr>
+          <tr class="border-b"><td class="py-2 pr-4">÷ group std</td><td class="py-2 pr-4"><code>÷ √( s²·Var(a) + 2s·Cov(a,c) + Var(c) )</code></td><td class="py-2"><code>÷ s·√Var(a)</code></td></tr>
+          <tr class="border-b"><td class="py-2 pr-4">= normalized</td><td class="py-2 pr-4"><code>[ s·(a−mean a) + (c−mean c) ] / √( s²·Var(a) + 2s·Cov(a,c) + Var(c) )</code></td><td class="py-2"><code>(a − mean a) / √Var(a)</code></td></tr>
+          <tr><td class="py-2 pr-4">depends on <code>s</code>?</td><td class="py-2 pr-4 text-rose-700"><b>yes → discriminable (0.35)</b></td><td class="py-2 text-emerald-700"><b>no — <code>s</code> cancels → blind (0.00)</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="text-gray-700 mb-3">The pivot is the last two rows. <b>No anchor:</b> numerator and denominator are <i>both</i> proportional to <code>s</code>, so it cancels exactly — every size yields the identical output. <b>With the anchor:</b> the numerator gains a constant term while the denominator becomes <code>√(s²·… + s·… + …)</code> — different powers of <code>s</code>, so it <i>can't</i> cancel. The normalized output then slides with size (toward the pure-geometry pattern when <code>s</code> is large, toward the anchor's pattern when <code>s</code> is small), and that slide is the entire 0.35. The fixed color isn't a scale signal because it <i>differs</i> between objects — it's identical — it's a non-scaling <b>ruler</b> the scaling geometry gets measured against.</p>
+
+    <p class="text-gray-700 mb-3">And it's testable. Strip the anchor (color → 0, first-conv bias off, so the conv output is the pure <code>s·a</code> branch) and <code>global+GN</code>'s size discrimination collapses exactly as the algebra predicts — landing right on unit-box's numbers:</p>
+
+    <div class="overflow-x-auto mb-3">
+      <table class="w-full text-sm md:text-base border-collapse">
+        <thead><tr class="border-b text-left"><th class="py-2 pr-4">variant</th><th class="py-2 pr-4">size-margin</th><th class="py-2">MRR</th></tr></thead>
+        <tbody class="text-gray-700">
+          <tr class="border-b"><td class="py-2 pr-4"><code>global+GN</code> — with anchor</td><td class="py-2 pr-4">0.35</td><td class="py-2">0.33</td></tr>
+          <tr class="border-b"><td class="py-2 pr-4"><code>global+GN</code> — anchor removed</td><td class="py-2 pr-4"><b>0.00</b></td><td class="py-2">0.09</td></tr>
+          <tr><td class="py-2 pr-4"><code>unitbb+GN</code> &nbsp;<span class="text-gray-500">(for comparison)</span></td><td class="py-2 pr-4"><b>0.00</b></td><td class="py-2">0.09</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="text-gray-700 mb-3">Two routes to scale-blindness — remove the anchor, or remove scale at the input with unit-box — converge on the <i>same</i> numbers (the MRR drop to 0.09 is the family-only ceiling, since the teacher also rewards size the model can no longer see). So "partly" is a fragile by-product of a fixed reference, not a real scale representation — which is exactly why the clean fix below injects scale <i>deliberately</i> rather than relying on a leak. <span class="text-gray-500">(Reproduce: <code>ablation_anchor.py</code> in the repo.)</span></p>
+
+    <p class="text-gray-700 mb-3">So I put scale back as an <b>explicit, dedicated signal</b> instead of letting it ride on raw activation magnitudes. Take the object's size, compress it with a log, expand it into Fourier features (so the network can resolve both tiny ratios like 3:4 and huge ones), pass it through a tiny MLP, and use the result to modulate the features — a <b>FiLM</b> layer (<code>output = (1+γ)·features + β</code>, with <code>γ, β</code> predicted from the size). This is the same trick diffusion models use to inject the timestep. The result (<code>unitbb + GN + FiLM</code>, green) is the best of both worlds: rock-stable <i>and</i> the strongest size discrimination of any variant (0.88 vs 0.00).</p>
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">Takeaways</h2>
+    <ul class="list-disc list-inside text-gray-700 space-y-1">
+      <li>BatchNorm carries hidden state (<code>running_var</code>/<code>running_mean</code>) that the loss never touches — so a healthy loss curve does <b>not</b> guarantee a healthy eval.</li>
+      <li>If your eval score jumps between adjacent checkpoints for no visible reason, log the BN running buffers. An anti-correlated buffer is the smoking gun.</li>
+      <li>A single-divisor normalization with no per-sample clamp lets scale outliers through, and variance grows as extent² — so the tail does the damage.</li>
+      <li>GroupNorm removes the instability for free, but it (and every per-sample norm) is scale-invariant — if absolute scale matters to you, you have to inject it back deliberately.</li>
+      <li>FiLM conditioning on a log-scale Fourier embedding is a clean way to do that: shape stays scale-invariant and stable; scale becomes its own bounded, explicit signal.</li>
+    </ul>
+  </section>
+
+  <div class="mt-10 flex items-center gap-3">
+    <a href="https://github.com/eitamar-saraf/scale-bn-demo" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-5 py-3 rounded border text-blue-700 hover:bg-blue-50 text-base md:text-lg">Repository</a>
+  </div>
+
+  <p class="mt-6 text-base md:text-lg text-gray-600">Caveats to keep me honest: every curve is a single training run (no error bars), the data is synthetic, and the encoder is deliberately small. To make the checkpoint-lottery visible inside a ~700-step demo I also raised BatchNorm's momentum above its default — real training survives the default only because its checkpoints are thousands of steps apart, giving the buffer long windows to recover. The repository documents all of this. It's a faithful reproduction of the <i>mechanism</i>, not a benchmark.</p>
+
+  <p class="mt-4 text-base md:text-lg text-gray-600">Related: <a href="/blog/batchnorm" class="text-blue-700 hover:underline">my earlier post on why BatchNorm helps</a> — this one is about how the same machinery can quietly bite you.</p>
+</BlogPostLayout>
