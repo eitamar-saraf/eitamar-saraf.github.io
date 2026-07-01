@@ -4,27 +4,23 @@
 This is a personal portfolio built with Astro, React, and Tailwind CSS. It features interactive machine learning demos, a blog, and a CV page.
 
 ## Structure
-- **Bio**: /about
-- **CV**: /cv (from src/content/cv.json)
-- **Blog**: /blog (MDX posts)
-- **Projects**: /projects (card grid, writeups, and demos)
+- **CV**: /cv (from `src/content/cv.json`)
+- **Blog**: /blog (each post is a standalone `.astro` page in `src/pages/blog/`)
+- **Demos**: /demos (interactive dashboards embedded via iframe)
+- **Projects**: /projects (card grid and writeups)
 
 ## Getting Started
-1. Install dependencies:
-	```bash
-	npm install
-	```
-2. Start the dev server:
-	```bash
-	npm run dev
-	```
-3. Build for production:
-	```bash
-	npm run build
-	```
+Requires **Node ≥ 18.20.8** (use `nvm install 20`).
+
+1. Install dependencies: `npm install`
+2. Start the dev server: `npm run dev` (http://localhost:4321)
+3. Build for production: `npm run build`
 
 ## Deployment
-This site is ready for deployment to GitHub Pages using Astro's static output and GitHub Actions.
+Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds on Node 20
+and deploys `./dist` to GitHub Pages.
 
----
-Replace placeholder content and add your own blog posts, projects, and demos!
+## Writing a new blog post
+See **[AUTHORING.md](./AUTHORING.md)** for a full guide: account/auth setup, how to
+create a post and its index card, adding images and demos, the carousel/lightbox
+component, and how & where to push.
