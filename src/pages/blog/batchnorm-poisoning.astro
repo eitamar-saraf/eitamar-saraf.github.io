@@ -14,30 +14,52 @@ export const frontmatter = {
     <b>TL;DR.</b> BatchNorm keeps a hidden <code>running_var</code> buffer that it uses at eval time. It updates by a running average of per-batch variance — <i>not</i> by gradient descent — so the loss is blind to it. A few giant-scale outliers (think a building modeled in millimeters) blow up the variance of the first conv layer; whichever checkpoint you save right after such a batch divides every clean input by a hugely inflated number and collapses. Swapping BatchNorm for <b>GroupNorm</b> removes the buffer and the instability — but it also erases the model's sense of absolute scale, so I had to add that back explicitly with a small <b>FiLM</b> conditioning path.
   </div>
 
-  <section class="mt-10">
+  <nav class="mb-6 p-4 rounded border bg-gray-50 text-gray-700 text-sm md:text-base">
+    <b class="block mb-1">Contents</b>
+    <ol class="list-decimal list-inside space-y-0.5">
+      <li><a href="#mystery" class="text-blue-700 hover:underline">The mystery: training looked perfect, evaluation didn't</a></li>
+      <li><a href="#breakthrough" class="text-blue-700 hover:underline">The breakthrough: diff the checkpoints</a></li>
+      <li><a href="#hidden-buffer" class="text-blue-700 hover:underline">The hidden buffer</a></li>
+      <li><a href="#why-outliers" class="text-blue-700 hover:underline">Why a few outliers poison it</a></li>
+      <li><a href="#fixes" class="text-blue-700 hover:underline">Three fixes, built one at a time</a>
+        <ol class="list-none ml-5 mt-0.5 space-y-0.5 text-gray-600">
+          <li><a href="#fix-1" class="hover:underline">Fix 1 — GroupNorm: delete the poisoned buffer</a></li>
+          <li><a href="#the-leak" class="hover:underline">Where the leak comes from</a></li>
+          <li><a href="#fix-2" class="hover:underline">Fix 2 — Unit-box: remove the outliers at the source</a></li>
+          <li><a href="#fix-3" class="hover:underline">Fix 3 — Unit-box + FiLM: put scale back deliberately</a></li>
+        </ol>
+      </li>
+      <li><a href="#takeaways" class="text-blue-700 hover:underline">Takeaways</a></li>
+      <li><a href="#references" class="text-blue-700 hover:underline">References</a></li>
+    </ol>
+  </nav>
+
+  <section id="mystery" class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">The mystery: training looked perfect, evaluation didn't</h2>
-    <p class="text-gray-700 mb-3">It began as one of those bugs that make you doubt your own tools. We evaluated a held-out retrieval metric every few hundred steps, and it would lurch — fine at one checkpoint, near-broken at the next, fine again — with no pattern anyone could see. So the first thing we did was stare at the training signals. They looked perfect. The rest of this post rebuilds the whole thing as a minimal, CPU-runnable model on synthetic data — so rather than show the internal run, here are the same three dashboards from that reproduction, which reproduces the symptom exactly:</p>
+    <p class="text-gray-700 mb-3">It began as one of those bugs that make you doubt your own tools. We evaluated a held-out retrieval metric every few hundred steps, and it would lurch — fine at one checkpoint, near-broken at the next, fine again — with no pattern anyone could see. So the first thing we did was stare at the training signals. They looked perfect. It looked like this — these three dashboards come from the minimal, CPU-runnable reproduction on synthetic data that the rest of this post builds, and they show the symptom exactly:</p>
     <figure class="bg-white rounded border p-2 mb-2">
       <img src="/plots/batchnorm-poisoning/toy_symptom.png" alt="Three panels from the reproduction: training loss smooth and converging, gradient norm with occasional spikes, and validation retrieval MRR crashing to near-zero at scattered checkpoints and recovering" class="w-full rounded" />
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 1 — The symptom: loss and gradients look healthy while the eval metric crashes and recovers between checkpoints.</figcaption>
     </figure>
     <p class="text-gray-700 mb-3"><b>Top — training loss:</b> smooth and converging, <i>zero</i> spikes. <b>Middle — gradient norm:</b> a few spikes early on, but those are routine and easy to wave off. <b>Bottom — validation retrieval MRR:</b> the only thing that misbehaves — it crashes almost to zero at scattered checkpoints and pops back to its baseline at the next one, with no pattern. The loss you'd normally trust says everything is fine; only the eval, computed on separate checkpoints, betrays the problem — and it gives no clue as to <i>why</i>.</p>
     <p class="text-gray-700 mb-3">So we turned to the obvious suspect: the <i>evaluation code</i>. Maybe the metric itself was flaky — a data-loading race, a stale cache, nondeterminism in the retrieval index, an off-by-one in how pairs were scored. We had an AI coding agent read the <b>entire</b> eval pipeline end to end, hunting for anything that could make a good model look broken or score differently from one run to the next. It came back empty: the eval code was correct. The model really <i>was</i> collapsing at those checkpoints — and nothing we were logging explained it.</p>
   </section>
 
-  <section class="mt-10">
+  <section id="breakthrough" class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">The breakthrough: stop watching metrics, diff the checkpoints</h2>
     <p class="text-gray-700 mb-3">If the model trains fine but some saved checkpoints are broken, then <i>something must be physically different</i> about those checkpoints. The idea that finally cracked it (from the same AI agent, after the eval-code dead end) was almost too blunt to take seriously: stop staring at curves and just <b>diff the weights</b>. For every tensor in the model, measure how much it changed from a good checkpoint to the next, bad one — relative to its own size, <code>‖ΔW‖ / ‖W‖</code> — and sort.</p>
     <p class="text-gray-700 mb-3">One entry detonated off the chart — its relative change was about <b>3,000× larger</b> than the next tensor's (a five-order-of-magnitude span over the run). And it wasn't a weight at all: it was <code>first_conv.running_var</code>, a <b>buffer</b> inside the first BatchNorm layer — something gradient descent, and therefore the loss, never touches.</p>
     <p class="text-gray-700 mb-3">That single line is the whole bug. The minimal reproduction from the opening lets us watch it happen safely: diff two of <i>its</i> adjacent checkpoints tensor-by-tensor and the same fingerprint appears — one buffer towers over every learnable parameter:</p>
     <figure class="bg-white rounded border p-2 mb-2">
       <img src="/plots/batchnorm-poisoning/figure_weightdelta.png" alt="Bar chart of per-tensor relative weight change between two adjacent checkpoints; first_conv running_var towers over every other tensor" class="w-full rounded" />
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 2 — Relative change per tensor between a good checkpoint and the next, bad one. One BatchNorm buffer dwarfs every learnable weight.</figcaption>
     </figure>
     <p class="text-gray-700 mb-3">Same story in miniature: every learnable parameter nudges by a fraction of a percent, while one BatchNorm buffer moves by hundreds of times its own size in a single checkpoint interval — over <b>1,700× more</b> than the next-largest tensor. The rest of this post is what that buffer is, why a few training samples send it flying, and how to fix it.</p>
   </section>
 
-  <section class="mt-10">
+  <section id="hidden-buffer" class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">The hidden buffer</h2>
-    <p class="text-gray-700 mb-3">BatchNorm does two different things depending on the mode. During <b>training</b> it standardizes each feature using the mean and variance of <i>the current mini-batch</i>. During <b>evaluation</b> it can't depend on whatever other examples happen to share the batch, so it instead uses a fixed pair of buffers — <code>running_mean</code> and <code>running_var</code> — that it accumulated during training as an exponential moving average:</p>
+    <p class="text-gray-700 mb-3"><a href="https://arxiv.org/abs/1502.03167" target="_blank" rel="noopener" class="text-blue-700 hover:underline">BatchNorm</a> does two different things depending on the mode. During <b>training</b> it standardizes each feature using the mean and variance of <i>the current mini-batch</i>. During <b>evaluation</b> it can't depend on whatever other examples happen to share the batch, so it instead uses a fixed pair of buffers — <code>running_mean</code> and <code>running_var</code> — that it accumulated during training as an exponential moving average:</p>
     <div class="bg-white rounded border p-4 mb-4 text-base md:text-lg leading-relaxed">
       <b>train step:</b> <code>x̂ = (x − μ<sub>batch</sub>) / √(σ²<sub>batch</sub> + ε)</code><br/>
       <b>buffer update:</b> <code>running_var ← (1−m)·running_var + m·σ²<sub>batch</sub></code><br/>
@@ -48,20 +70,77 @@ export const frontmatter = {
     </div>
   </section>
 
-  <section class="mt-10">
+  <section id="why-outliers" class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Why a few outliers poison it</h2>
     <p class="text-gray-700 mb-3">My point clouds are normalized by a <b>single dataset-wide divisor</b> rather than per-sample. That's deliberate: I want a 3&nbsp;mm part and a 4&nbsp;mm part to stay <i>different</i> after normalization, because absolute size is a real, discriminative feature. The cost is that there's <b>no per-sample clamp</b>: an object that is genuinely enormous (a building uploaded in millimeters, or a unit-error model) keeps enormous coordinates after "normalization".</p>
     <p class="text-gray-700 mb-3">The first convolution turns large coordinates into large activations, and variance grows with the <i>square</i> of the spread. The left panel below shows the distribution of per-sample extent (how far the coordinates reach after normalization) on a <b>log₁₀</b> axis: a healthy bulk at log₁₀ ≈ 0 (extent ≈ 1), with a detached tail of outliers out near log₁₀ ≈ 3–4 — that is, extent in the <b>thousands to ten-thousands</b>. The right panel plots the resulting first-layer variance against the raw extent (both axes log-scaled) — a clean <code>variance ∝ extent²</code> line, with the tail samples sitting at variances five to eight orders of magnitude above the bulk.</p>
     <figure class="bg-white rounded border p-2 mb-2">
       <img src="/plots/batchnorm-poisoning/data_diagnostic.png" alt="Left: histogram of per-sample extent with a long outlier tail. Right: first-conv variance grows as extent squared." class="w-full rounded" />
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 3 — The driver: a detached tail of extreme-extent samples (left) whose first-layer variance grows as extent² (right).</figcaption>
     </figure>
     <p class="text-gray-700 mb-3">When one of those tail samples lands in a batch, the batch variance is dominated by it, the moving average drinks it in, and <code>running_var</code> spikes. At the next eval, every clean input gets divided by that inflated variance, the embedding collapses, and retrieval falls to chance — until enough clean batches pass for the moving average to recover. That's the see-saw.</p>
     <div class="p-4 rounded border bg-amber-50 text-amber-900">
       <b>But if the outlier is in a training batch, why doesn't the <i>loss</i> spike too?</b> Because real training runs on a <b>large effective batch</b> — gradient accumulation over many micro-batches, usually across several GPUs. The outlier lands in one micro-batch, so its contribution to the <i>averaged</i> gradient is diluted to near-nothing: the optimizer step, and the loss you log, barely budge. BatchNorm, though, computes its statistics <b>per micro-batch</b> — so that one micro-batch's variance is absorbed into <code>running_var</code> at full strength. <b>The averaging dilutes the outlier's gradient; it does not dilute its effect on the buffer.</b> That asymmetry is the whole reason the loss stays smooth while eval see-saws. (The reproduction above uses exactly this — micro-batch 36, accumulation 12 — which is why its top panel is smooth while its bottom panel crashes.)
     </div>
+    <figure class="bg-white rounded border p-2 mt-4 mb-2">
+      <div class="overflow-x-auto">
+        <svg viewBox="0 0 960 400" class="min-w-[760px] w-full" role="img" aria-label="Diagram: one outlier micro-batch feeds two paths — its gradient is averaged away, but its variance enters the running_var EMA at full strength, so eval collapses at the next checkpoint" font-family="ui-sans-serif, system-ui, sans-serif">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+            </marker>
+            <marker id="arr-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#b91c1c"/>
+            </marker>
+          </defs>
+
+          <!-- micro-batch stack -->
+          <text x="75" y="88" text-anchor="middle" font-size="13" fill="#334155" font-weight="600">one optimizer step</text>
+          <text x="75" y="106" text-anchor="middle" font-size="12" fill="#64748b">12 micro-batches</text>
+          <rect x="30" y="120" width="90" height="30" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
+          <rect x="30" y="156" width="90" height="30" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
+          <rect x="30" y="192" width="90" height="30" rx="5" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+          <text x="75" y="212" text-anchor="middle" font-size="12" fill="#b91c1c" font-weight="700">outlier</text>
+          <rect x="30" y="228" width="90" height="30" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
+          <text x="75" y="278" text-anchor="middle" font-size="16" fill="#94a3b8">⋮</text>
+
+          <!-- path 1: gradient -->
+          <text x="240" y="52" font-size="13" fill="#15803d" font-weight="700">path 1 — what the loss sees</text>
+          <line x1="126" y1="160" x2="228" y2="106" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+          <rect x="232" y="72" width="250" height="62" rx="8" fill="#f0fdf4" stroke="#15803d"/>
+          <text x="357" y="98" text-anchor="middle" font-size="13" fill="#166534">gradient averaged over</text>
+          <text x="357" y="116" text-anchor="middle" font-size="13" fill="#166534">all 12 micro-batches</text>
+          <line x1="486" y1="103" x2="548" y2="103" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+          <rect x="552" y="72" width="180" height="62" rx="8" fill="#f0fdf4" stroke="#15803d"/>
+          <text x="642" y="98" text-anchor="middle" font-size="13" fill="#166534">optimizer step:</text>
+          <text x="642" y="116" text-anchor="middle" font-size="13" fill="#166534">weights barely move</text>
+          <line x1="736" y1="103" x2="798" y2="103" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+          <text x="808" y="96" font-size="13" fill="#15803d" font-weight="700">loss stays</text>
+          <text x="808" y="114" font-size="13" fill="#15803d" font-weight="700">smooth ✓</text>
+          <text x="357" y="152" text-anchor="middle" font-size="12" fill="#64748b" font-style="italic">outlier diluted ×1/12</text>
+
+          <!-- path 2: buffer -->
+          <text x="240" y="252" font-size="13" fill="#b91c1c" font-weight="700">path 2 — the side channel (no gradient)</text>
+          <line x1="126" y1="200" x2="228" y2="290" stroke="#b91c1c" stroke-width="1.5" marker-end="url(#arr-red)"/>
+          <rect x="232" y="266" width="250" height="62" rx="8" fill="#fef2f2" stroke="#b91c1c"/>
+          <text x="357" y="292" text-anchor="middle" font-size="13" fill="#991b1b">σ² computed per micro-batch</text>
+          <text x="357" y="310" text-anchor="middle" font-size="13" fill="#991b1b">— outlier at full strength</text>
+          <line x1="486" y1="297" x2="548" y2="297" stroke="#b91c1c" stroke-width="1.5" marker-end="url(#arr-red)"/>
+          <rect x="552" y="266" width="180" height="62" rx="8" fill="#fef2f2" stroke="#b91c1c" stroke-width="1.5"/>
+          <text x="642" y="292" text-anchor="middle" font-size="13" fill="#991b1b" font-weight="700">running_var ← EMA</text>
+          <text x="642" y="310" text-anchor="middle" font-size="13" fill="#991b1b">spikes ~×1000</text>
+          <line x1="736" y1="297" x2="798" y2="297" stroke="#b91c1c" stroke-width="1.5" marker-end="url(#arr-red)"/>
+          <text x="808" y="282" font-size="13" fill="#b91c1c" font-weight="700">checkpoint saved</text>
+          <text x="808" y="300" font-size="13" fill="#b91c1c" font-weight="700">now → eval</text>
+          <text x="808" y="318" font-size="13" fill="#b91c1c" font-weight="700">collapses ✗</text>
+          <text x="357" y="352" text-anchor="middle" font-size="12" fill="#64748b" font-style="italic">no loss term pushes on this — training is blind to it</text>
+        </svg>
+      </div>
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 4 — One outlier micro-batch, two paths. Its gradient is averaged away (top), but its variance enters the <code>running_var</code> EMA at full strength (bottom).</figcaption>
+    </figure>
   </section>
 
-  <section class="mt-10">
+  <section id="fixes" class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Three fixes, built one at a time</h2>
     <p class="text-gray-700 mb-3">I trained the same small encoder four ways — the bug, then three fixes. The point of showing all four isn't that the last one wins; it's that <b>each fix solves the previous one's problem and exposes a new one</b>. So I'll build them up in order. <code>global</code> means the shared-divisor normalization from above; <code>unitbb</code> means per-sample unit-box normalization (every object rescaled into the same cube). Here's the whole comparison at a glance, then one rung at a time:</p>
 
@@ -81,18 +160,23 @@ export const frontmatter = {
 
     <figure class="bg-white rounded border p-2 mb-2">
       <img src="/plots/batchnorm-poisoning/four_variants.png" alt="Four-panel comparison: running_var, eval MRR, embedding-collapse indicator, and size discrimination across the four variants." class="w-full rounded" />
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 5 — The four variants: <code>running_var</code>, eval MRR, embedding-collapse indicator, and 3&nbsp;mm-vs-4&nbsp;mm separation.</figcaption>
     </figure>
 
-    <h3 class="text-2xl font-bold mt-8 mb-2">Fix&nbsp;1 — GroupNorm: delete the poisoned buffer</h3>
-    <p class="text-gray-700 mb-3"><b>What it does.</b> The bug lived in a shared, eval-time buffer, so the most direct fix is a normalization that has no such buffer. <b>GroupNorm</b> (orange) normalizes <i>within each sample</i> across channel groups — using only that sample's own statistics, at both train and eval. It keeps no running average of anything.</p>
+    <h3 id="fix-1" class="text-2xl font-bold mt-8 mb-2">Fix&nbsp;1 — GroupNorm: delete the poisoned buffer</h3>
+    <p class="text-gray-700 mb-3"><b>What it does.</b> The bug lived in a shared, eval-time buffer, so the most direct fix is a normalization that has no such buffer. <a href="https://arxiv.org/abs/1803.08494" target="_blank" rel="noopener" class="text-blue-700 hover:underline"><b>GroupNorm</b></a> (orange) normalizes <i>within each sample</i> across channel groups — using only that sample's own statistics, at both train and eval. It keeps no running average of anything.</p>
     <p class="text-gray-700 mb-3"><b>Why it's a fix.</b> With no <code>running_var</code> to accumulate, there is nothing for an outlier batch to poison; train-mode and eval-mode compute the identical thing, and the see-saw disappears (orange, flat). It's a one-line layer swap and it's the fix that actually shipped. If all you need is stability, you can stop here.</p>
 
     <div class="p-4 rounded border bg-rose-50 text-rose-900 mb-3">
-      <b>Still not perfect (1): it patches the symptom, not the source.</b> The outliers are still in the data. A meter-scale part still produces enormous activations on its <i>own</i> forward pass — GroupNorm just stops that from leaking into a shared buffer, so the occasional grad-norm spike remains and you're one careless refactor (any reintroduced cross-sample statistic) away from the bug returning. <b>Still not perfect (2): the scale it seems to keep is an accident.</b> Removing the running buffer is what fixed the <i>stability</i>. But GroupNorm comes bundled with a second, separate property: like every per-sample normalization (LayerNorm, InstanceNorm too) it is <b>scale-invariant by construction</b> (<code>norm(s·x) = norm(x)</code>), so it cannot represent absolute scale on its own. <code>global + GroupNorm</code> still looks partly scale-aware above (0.46) only because the <i>global</i> normalization smuggles a little scale into the raw coordinates — a weak, leaky signal. <b>What is that smuggled signal, concretely?</b> Under global normalization a physically bigger object simply keeps larger coordinates — a 3&nbsp;mm part lands around ±0.05, a 4&nbsp;mm part around ±0.07 — so the sheer <i>magnitude</i> of each local patch is itself a proxy for absolute size. GroupNorm's whole job is to standardize that magnitude away, and it almost succeeds; what survives is a faint trace of <i>how big the patch is relative to the network's fixed color-and-bias reference</i> (the next section makes that precise). It's a real size cue, but an accidental and fragile one. The moment you switch to the cleaner per-sample <b>unit-box</b> normalization — the version that fully tames the outliers — that smuggled signal is gone too: a 3&nbsp;mm and a 4&nbsp;mm version of the same shape become <i>identical inputs before the network even sees them</i>. The bottom-right panel makes it concrete: <code>unitbb + GroupNorm</code> (blue) scores <b>0.00</b> on telling them apart. Stable, but blind.
+      <b>Still not perfect (1): it patches the propagation, not the source.</b> The outliers are still in the data, and a meter-scale part still produces enormous activations on its own forward pass. GroupNorm only stops that from leaking into a shared buffer — the occasional grad-norm spike remains, and any refactor that reintroduces a cross-sample statistic brings the bug straight back.
+    </div>
+    <div class="p-4 rounded border bg-rose-50 text-rose-900 mb-3">
+      <b>Still not perfect (2): the scale it seems to keep is an accident.</b> Like every per-sample normalization (LayerNorm and InstanceNorm too), GroupNorm is <b>scale-invariant by construction</b>: <code>norm(s·x) = norm(x)</code>. So the 0.46 size-discrimination it shows above shouldn't exist at all — it survives only through a leak, which the next subsection pins down exactly. And the leak dies with the outlier fix: switch to per-sample <b>unit-box</b> normalization and a 3&nbsp;mm and a 4&nbsp;mm version of the same shape become <i>identical inputs before the network even sees them</i> — <code>unitbb + GroupNorm</code> (blue) scores <b>0.00</b> on telling them apart. Stable, but blind.
     </div>
 
-    <h3 class="text-2xl font-bold mt-8 mb-2">Why only <i>partly</i>? Where the leak comes from</h3>
-    <p class="text-gray-700 mb-3">It's worth seeing exactly why <code>global + GroupNorm</code> keeps a <i>little</i> scale (0.46) when GroupNorm is supposedly scale-invariant. The first conv produces, per channel, a <b>geometry part that scales with the object's size <code>s</code></b>, plus a <b>fixed offset <code>c</code></b> from the constant color (0.4) and the layer's bias — and crucially <code>c</code> is the <i>same</i> for a 3&nbsp;mm and a 4&nbsp;mm object (identical color). GroupNorm then z-scores each patch: subtract the group mean, divide by the group std. The whole question is whether <code>s</code> survives that. Follow it down each branch:</p>
+    <h3 id="the-leak" class="text-2xl font-bold mt-8 mb-2">Why only <i>partly</i>? Where the leak comes from</h3>
+    <p class="text-gray-700 mb-3">It's worth seeing exactly why <code>global + GroupNorm</code> keeps a <i>little</i> scale (0.46) when GroupNorm is supposedly scale-invariant. First, where would a scale signal even come from? Under global normalization a physically bigger object simply keeps larger coordinates — a 3&nbsp;mm part lands around ±0.05, a 4&nbsp;mm part around ±0.07 — so the sheer <i>magnitude</i> of each local patch is itself a proxy for absolute size. GroupNorm's whole job is to standardize that magnitude away, and it almost succeeds. What survives is a trace of <i>how big the patch is relative to a fixed reference inside the network</i>.</p>
+    <p class="text-gray-700 mb-3">Here is that reference, precisely. The first conv produces, per channel, a <b>geometry part that scales with the object's size <code>s</code></b>, plus a <b>fixed offset <code>c</code></b> from the constant color (0.4) and the layer's bias — and crucially <code>c</code> is the <i>same</i> for a 3&nbsp;mm and a 4&nbsp;mm object (identical color). GroupNorm then z-scores each patch: subtract the group mean, divide by the group std. The whole question is whether <code>s</code> survives that. Follow it down each branch:</p>
 
     <div class="overflow-x-auto mb-3">
       <table class="w-full text-sm md:text-base border-collapse">
@@ -128,22 +212,75 @@ export const frontmatter = {
 
     <p class="text-gray-700 mb-3">Two routes to scale-blindness — remove the anchor, or remove scale at the input with unit-box — converge on the <i>same</i> numbers (the MRR drop to 0.09 is the family-only ceiling, since the teacher also rewards size the model can no longer see). So "partly" is a fragile by-product of a fixed reference, not a real scale representation. <span class="text-gray-500">(Reproduce: <code>ablation_anchor.py</code> in the repo.)</span> That fragility is what motivates the next two rungs: stop relying on the leak entirely — first strip scale cleanly at the input, then put it back as a signal we control.</p>
 
-    <h3 class="text-2xl font-bold mt-8 mb-2">Fix&nbsp;2 — Unit-box: remove the outliers at the source</h3>
+    <h3 id="fix-2" class="text-2xl font-bold mt-8 mb-2">Fix&nbsp;2 — Unit-box: remove the outliers at the source</h3>
     <p class="text-gray-700 mb-3"><b>What it does.</b> Replace the shared divisor with per-sample <b>unit-box</b> normalization (blue): rescale every object so its bounding box is the same cube, <i>before</i> the network sees it.</p>
     <p class="text-gray-700 mb-3"><b>Why it's a fix.</b> This goes after the root cause instead of the symptom. Once every sample is rescaled into the same box, there are no giant coordinates left <i>for anyone</i> — the outlier's extent is clamped to the same range as every clean part, so first-conv activations are bounded across the board. The explosion doesn't just fail to leak into a buffer; it never happens. Even with plain BatchNorm there'd be nothing to poison, and the grad-norm spikes go away too. It's the most robust rung against the mechanism, and it's the clean, scale-free geometry base we need for the next step.</p>
     <div class="p-4 rounded border bg-rose-50 text-rose-900 mb-3">
       <b>Still not perfect: it throws away a feature we need.</b> Unit-box makes a 3&nbsp;mm and a 4&nbsp;mm version of the same shape into <i>byte-identical inputs</i> — the encoder becomes truly scale-blind (size-margin <b>0.00</b>), and retrieval that leans on size collapses (MRR 0.34&nbsp;→&nbsp;0.10, because the teacher rewards a size the model can no longer see). For CAD, where an M3 and an M4 bolt are different parts, that's not acceptable. We fixed stability by amputating absolute scale.
     </div>
 
-    <h3 class="text-2xl font-bold mt-8 mb-2">Fix&nbsp;3 — Unit-box + FiLM: put scale back deliberately</h3>
-    <p class="text-gray-700 mb-3"><b>What it does.</b> Keep unit-box + GroupNorm for the geometry (stable, scale-free), then re-inject absolute scale as an <b>explicit, dedicated signal</b> instead of letting it ride on raw activation magnitudes. Take the object's size, compress it with a log, expand it into Fourier features (so the network can resolve both tiny ratios like 3:4 and huge ones), pass it through a tiny MLP, and use the result to modulate the features — a <b>FiLM</b> layer (<code>output = (1+γ)·features + β</code>, with <code>γ, β</code> predicted from the size). It's the same trick diffusion models use to inject the timestep.</p>
+    <h3 id="fix-3" class="text-2xl font-bold mt-8 mb-2">Fix&nbsp;3 — Unit-box + FiLM: put scale back deliberately</h3>
+    <p class="text-gray-700 mb-3"><b>What it does.</b> Keep unit-box + GroupNorm for the geometry (stable, scale-free), then re-inject absolute scale as an <b>explicit, dedicated signal</b> instead of letting it ride on raw activation magnitudes. Take the object's size, compress it with a log, expand it into <a href="https://arxiv.org/abs/2006.10739" target="_blank" rel="noopener" class="text-blue-700 hover:underline">Fourier features</a> (so the network can resolve both tiny ratios like 3:4 and huge ones), pass it through a tiny MLP, and use the result to modulate the features — a <a href="https://arxiv.org/abs/1709.07871" target="_blank" rel="noopener" class="text-blue-700 hover:underline"><b>FiLM</b></a> layer (<code>output = (1+γ)·features + β</code>, with <code>γ, β</code> predicted from the size). It's the same trick <a href="https://arxiv.org/abs/2212.09748" target="_blank" rel="noopener" class="text-blue-700 hover:underline">diffusion models use to inject the timestep</a>.</p>
+    <figure class="bg-white rounded border p-2 mb-3">
+      <div class="overflow-x-auto">
+        <svg viewBox="0 0 1005 340" class="min-w-[760px] w-full" role="img" aria-label="Diagram: the point cloud splits into a scale-invariant shape path (unit-box then encoder) and an explicit scale path (log size, Fourier features, MLP), merged by a FiLM layer into a stable, size-aware embedding" font-family="ui-sans-serif, system-ui, sans-serif">
+          <defs>
+            <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+            </marker>
+          </defs>
+
+          <!-- input -->
+          <rect x="24" y="136" width="140" height="64" rx="8" fill="#f8fafc" stroke="#64748b"/>
+          <text x="94" y="163" text-anchor="middle" font-size="13" fill="#334155" font-weight="600">point cloud</text>
+          <text x="94" y="182" text-anchor="middle" font-size="12" fill="#64748b">M3 bolt (3 mm)</text>
+
+          <!-- shape path -->
+          <text x="230" y="40" font-size="13" fill="#1d4ed8" font-weight="700">shape path — scale-invariant, outlier-proof</text>
+          <line x1="168" y1="150" x2="222" y2="102" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr2)"/>
+          <rect x="226" y="58" width="180" height="60" rx="8" fill="#eff6ff" stroke="#1d4ed8"/>
+          <text x="316" y="84" text-anchor="middle" font-size="13" fill="#1e40af">unit-box normalize</text>
+          <text x="316" y="102" text-anchor="middle" font-size="12" fill="#3b82f6">(3 mm ≡ 4 mm from here)</text>
+          <line x1="410" y1="88" x2="464" y2="88" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr2)"/>
+          <rect x="468" y="58" width="190" height="60" rx="8" fill="#eff6ff" stroke="#1d4ed8"/>
+          <text x="563" y="84" text-anchor="middle" font-size="13" fill="#1e40af">encoder</text>
+          <text x="563" y="102" text-anchor="middle" font-size="12" fill="#3b82f6">conv + GroupNorm</text>
+          <line x1="662" y1="88" x2="716" y2="146" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr2)"/>
+          <text x="668" y="74" font-size="12" fill="#64748b" font-style="italic">features h</text>
+
+          <!-- scale path -->
+          <text x="230" y="316" font-size="13" fill="#15803d" font-weight="700">scale path — explicit, controllable</text>
+          <line x1="168" y1="186" x2="222" y2="238" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr2)"/>
+          <rect x="226" y="222" width="180" height="60" rx="8" fill="#f0fdf4" stroke="#15803d"/>
+          <text x="316" y="248" text-anchor="middle" font-size="13" fill="#166534">bbox size = 3 mm</text>
+          <text x="316" y="266" text-anchor="middle" font-size="12" fill="#16a34a">captured before normalization</text>
+          <line x1="410" y1="252" x2="464" y2="252" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr2)"/>
+          <rect x="468" y="222" width="190" height="60" rx="8" fill="#f0fdf4" stroke="#15803d"/>
+          <text x="563" y="248" text-anchor="middle" font-size="13" fill="#166534">log → Fourier → MLP</text>
+          <text x="563" y="266" text-anchor="middle" font-size="12" fill="#16a34a">→ (γ, β)</text>
+          <line x1="662" y1="252" x2="716" y2="196" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+          <!-- FiLM merge -->
+          <rect x="720" y="140" width="150" height="62" rx="8" fill="#faf5ff" stroke="#7e22ce" stroke-width="1.5"/>
+          <text x="795" y="166" text-anchor="middle" font-size="13" fill="#6b21a8" font-weight="700">FiLM</text>
+          <text x="795" y="184" text-anchor="middle" font-size="13" fill="#6b21a8">(1+γ)·h + β</text>
+          <line x1="874" y1="171" x2="908" y2="171" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr2)"/>
+          <text x="914" y="152" font-size="13" fill="#334155" font-weight="600">
+            <tspan x="914" dy="0">embedding:</tspan>
+            <tspan x="914" dy="17">stable AND</tspan>
+            <tspan x="914" dy="17">size-aware</tspan>
+          </text>
+        </svg>
+      </div>
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 6 — Decoupled: a scale-invariant shape path plus an explicit scale path, merged by FiLM.</figcaption>
+    </figure>
     <p class="text-gray-700 mb-3"><b>Why it's a fix.</b> It <b>decouples shape from scale</b>: geometry stays scale-invariant and robust, while scale enters through a separate, controllable path rather than an accidental leak. The result (<code>unitbb + GN + FiLM</code>, green) is the best of both worlds — rock-stable <i>and</i> the strongest size discrimination of any variant (0.91 vs 0.00), with the best retrieval too.</p>
     <div class="p-4 rounded border bg-rose-50 text-rose-900 mb-3">
       <b>Still not perfect.</b> It's the most complex rung: scale must be captured at preprocessing and threaded all the way to the forward pass <i>before</i> normalization erases it, plus new modules and new knobs — the Fourier band range is load-bearing (too narrow and it can't resolve 3:4, or it saturates on genuinely huge parts). And it inherits the <b>teacher's ceiling</b>: the model only learns the size sense the text teacher rewards, and that geometry turns out to be <i>categorical, not metric</i> (a size-16 part is about as far from size-18 as from size-64) — so 0.91 is discrimination against a teacher that isn't itself a true "how many mm" sense. A single log-size is also a blunt summary for a long, thin part. Finally, this is shown here only at toy scale; the full-size version is still an in-progress training run.
     </div>
   </section>
 
-  <section class="mt-10">
+  <section id="takeaways" class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Takeaways</h2>
     <ul class="list-disc list-inside text-gray-700 space-y-1">
       <li>BatchNorm carries hidden state (<code>running_var</code>/<code>running_mean</code>) that the loss never touches — so a healthy loss curve does <b>not</b> guarantee a healthy eval.</li>
@@ -153,6 +290,17 @@ export const frontmatter = {
       <li>FiLM conditioning on a log-scale Fourier embedding is a clean way to do that: shape stays scale-invariant and stable; scale becomes its own bounded, explicit signal.</li>
       <li>None of these fixes clean the <i>data</i>. Genuine unit-error uploads (a house modeled in kilometers) still belong filtered upstream — separate from <i>legitimately</i> huge parts, which unit-box and FiLM handle fine. "Fix the norm layer" and "fix the dataset" are different jobs.</li>
     </ul>
+  </section>
+
+  <section id="references" class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">References</h2>
+    <ol class="list-decimal list-inside text-gray-700 space-y-1 text-base md:text-lg">
+      <li>Ioffe &amp; Szegedy. <a href="https://arxiv.org/abs/1502.03167" target="_blank" rel="noopener" class="text-blue-700 hover:underline">"Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift."</a> ICML 2015.</li>
+      <li>Wu &amp; He. <a href="https://arxiv.org/abs/1803.08494" target="_blank" rel="noopener" class="text-blue-700 hover:underline">"Group Normalization."</a> ECCV 2018.</li>
+      <li>Perez et al. <a href="https://arxiv.org/abs/1709.07871" target="_blank" rel="noopener" class="text-blue-700 hover:underline">"FiLM: Visual Reasoning with a General Conditioning Layer."</a> AAAI 2018.</li>
+      <li>Tancik et al. <a href="https://arxiv.org/abs/2006.10739" target="_blank" rel="noopener" class="text-blue-700 hover:underline">"Fourier Features Let Networks Learn High Frequency Functions in Low Dimensional Domains."</a> NeurIPS 2020.</li>
+      <li>Peebles &amp; Xie. <a href="https://arxiv.org/abs/2212.09748" target="_blank" rel="noopener" class="text-blue-700 hover:underline">"Scalable Diffusion Models with Transformers."</a> ICCV 2023 — the AdaLN-Zero timestep conditioning that FiLM-style scale injection mirrors.</li>
+    </ol>
   </section>
 
   <div class="mt-10 flex items-center gap-3">
