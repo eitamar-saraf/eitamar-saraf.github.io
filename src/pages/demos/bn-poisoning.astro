@@ -1,0 +1,243 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout>
+  <main class="max-w-6xl mx-auto py-10 px-4 sm:px-6">
+    <h1 class="text-2xl font-bold mb-2">BatchNorm <code>running_var</code> Poisoning — Live Simulator</h1>
+    <p class="text-gray-700 mb-4 max-w-3xl">
+      This runs the <b>exact update BatchNorm performs</b>, once per batch (verified against the PyTorch source —
+      see <a href="/blog/batchnorm-poisoning" class="text-blue-700 hover:underline">the writeup</a>):
+      the variance is pooled over <i>every sample and point in the batch</i> into one number per channel, then folded
+      into an exponential moving average. Watch what one giant sample does to it — then change the numbers.
+    </p>
+
+    <div class="rounded border bg-gray-50 p-3 mb-5 font-mono text-sm md:text-base overflow-x-auto">
+      σ²<sub>batch</sub> = ((B−k)·v<sub>clean</sub> + k·v<sub>outlier</sub>) / B &nbsp;&nbsp;<span class="text-gray-500">// pooled over the whole batch — k outliers contaminate everyone's statistic</span><br/>
+      running_var ← (1−m)·running_var + m·σ²<sub>batch</sub> &nbsp;&nbsp;<span class="text-gray-500">// once per batch, never per sample</span>
+    </div>
+
+    <section class="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-6">
+      <aside class="border rounded-lg p-4 bg-white shadow-sm text-sm">
+        <h2 class="font-semibold mb-2">Controls</h2>
+        <div class="space-y-3">
+          <label class="block">
+            <span class="text-gray-600">momentum <code>m</code> (torch default 0.1)</span>
+            <input id="mom" type="range" min="0.01" max="0.5" step="0.01" value="0.1" class="w-full" />
+            <span class="text-xs text-gray-500">m = <span id="momVal">0.10</span></span>
+          </label>
+          <label class="block">
+            <span class="text-gray-600">batch size <code>B</code></span>
+            <input id="bsz" type="range" min="4" max="512" step="4" value="36" class="w-full" />
+            <span class="text-xs text-gray-500">B = <span id="bszVal">36</span></span>
+          </label>
+          <label class="block">
+            <span class="text-gray-600">clean per-sample variance</span>
+            <input id="vclean" type="number" min="0.0001" step="0.001" value="0.006" class="mt-1 w-full border rounded px-2 py-1" />
+          </label>
+          <label class="block">
+            <span class="text-gray-600">outlier per-sample variance</span>
+            <input id="vout" type="number" min="0" step="100" value="12000" class="mt-1 w-full border rounded px-2 py-1" />
+            <span class="text-xs text-gray-500">poisoned-batch σ² = <span id="sigOut">333</span></span>
+          </label>
+          <label class="block">
+            <span class="text-gray-600">chance a batch contains an outlier</span>
+            <input id="prob" type="range" min="0" max="10" step="0.1" value="1" class="w-full" />
+            <span class="text-xs text-gray-500"><span id="probVal">1.0</span>% per batch</span>
+          </label>
+        </div>
+
+        <h2 class="font-semibold mt-4 mb-2">Run</h2>
+        <div class="flex flex-wrap gap-2">
+          <button id="run" class="px-3 py-1.5 rounded border bg-blue-700 text-white hover:bg-blue-800">▶ Run</button>
+          <button id="step" class="px-3 py-1.5 rounded border text-blue-700 hover:bg-blue-50">Step</button>
+          <button id="inject" class="px-3 py-1.5 rounded border text-rose-700 hover:bg-rose-50">Inject outlier</button>
+          <button id="reset" class="px-3 py-1.5 rounded border text-gray-700 hover:bg-gray-50">Reset</button>
+        </div>
+
+        <h2 class="font-semibold mt-4 mb-2">Presets</h2>
+        <div class="flex flex-wrap gap-2 text-xs">
+          <button data-preset="ours" class="preset px-2 py-1 rounded border text-blue-700 hover:bg-blue-50">Our scenario</button>
+          <button data-preset="none" class="preset px-2 py-1 rounded border text-blue-700 hover:bg-blue-50">No outliers</button>
+          <button data-preset="mild" class="preset px-2 py-1 rounded border text-blue-700 hover:bg-blue-50">Mild outliers</button>
+          <button data-preset="bigbatch" class="preset px-2 py-1 rounded border text-blue-700 hover:bg-blue-50">Huge batch (B=512)</button>
+        </div>
+        <p class="text-xs text-gray-500 mt-3">"Huge batch" is the instructive one: averaging <i>inside</i> the batch shrinks σ² only linearly in B — the poisoned batch is still thousands of times the clean level.</p>
+      </aside>
+
+      <div>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3 text-center">
+          <div class="border rounded-lg p-2 bg-white shadow-sm"><div class="text-xs text-gray-500">running_var now</div><div id="roRv" class="text-lg font-semibold text-gray-800">—</div></div>
+          <div class="border rounded-lg p-2 bg-white shadow-sm"><div class="text-xs text-gray-500">× over clean level</div><div id="roRatio" class="text-lg font-semibold text-gray-800">—</div></div>
+          <div class="border rounded-lg p-2 bg-white shadow-sm"><div class="text-xs text-gray-500">eval shrinks clean features by</div><div id="roAtt" class="text-lg font-semibold text-gray-800">—</div></div>
+          <div class="border rounded-lg p-2 bg-white shadow-sm"><div class="text-xs text-gray-500">batches until recovered</div><div id="roRec" class="text-lg font-semibold text-gray-800">—</div></div>
+        </div>
+
+        <div class="relative border rounded-lg bg-white shadow-sm p-2">
+          <canvas id="chart" width="1000" height="460" class="w-full h-auto"></canvas>
+          <div id="tip" class="absolute hidden pointer-events-none bg-gray-900 text-white text-xs rounded px-2 py-1"></div>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">
+          Log scale. <span class="text-emerald-700">Green dashed</span> = healthy clean level. <span class="text-rose-700">Red dots</span> = batches that contained an outlier;
+          <span class="text-rose-700">red shading</span> = a checkpoint saved here evaluates broken (running_var &gt; 10× clean).
+          Buffer starts at 1.0 — PyTorch's init — so the opening decay is the normal warm-up.
+        </p>
+      </div>
+    </section>
+
+    <p class="mt-6 text-sm text-gray-600 max-w-3xl">
+      Semantics verified against <code>torch 2.9</code>: stats pooled per channel over batch + points
+      (<code>reduction_dims = [0, 2…]</code>), buffer stores the unbiased variance (<code>× n/(n−1)</code> ≈ 1 here, omitted),
+      one EMA update per forward call. Full story: <a href="/blog/batchnorm-poisoning" class="text-blue-700 hover:underline">the writeup</a> ·
+      <a href="https://github.com/eitamar-saraf/scale-bn-demo" target="_blank" rel="noopener" class="text-blue-700 hover:underline">the repo</a>.
+    </p>
+  </main>
+
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const cnv = $("chart"), ctx = cnv.getContext("2d"), tip = $("tip");
+
+    const state = { rv: 1.0, hist: [], out: [], sig: [], timer: null, forced: 0, rng: mkRng(42) };
+    function mkRng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
+
+    const P = () => ({
+      m: parseFloat($("mom").value), B: parseInt($("bsz").value),
+      vc: Math.max(1e-6, parseFloat($("vclean").value) || 0.006),
+      vo: Math.max(0, parseFloat($("vout").value) || 0),
+      p: parseFloat($("prob").value) / 100,
+    });
+
+    function sigma2(k, p) { return ((p.B - k) * p.vc + k * p.vo) / p.B; }
+
+    function stepOnce() {
+      const p = P();
+      let k = 0;
+      if (state.forced > 0) { k = 1; state.forced--; }
+      else if (state.rng() < p.p) k = 1;
+      const s2 = sigma2(k, p);
+      state.rv = (1 - p.m) * state.rv + p.m * s2;
+      state.hist.push(state.rv); state.out.push(k); state.sig.push(s2);
+      if (state.hist.length > 2000) { state.hist.shift(); state.out.shift(); state.sig.shift(); }
+    }
+
+    function reset() {
+      clearInterval(state.timer); state.timer = null; $("run").textContent = "▶ Run";
+      state.rv = 1.0; state.hist = []; state.out = []; state.sig = []; state.forced = 0; state.rng = mkRng(42);
+      draw();
+    }
+
+    // ---------- drawing ----------
+    const M = { l: 64, r: 16, t: 14, b: 30 };
+    function bounds() {
+      const p = P();
+      const lo = Math.min(p.vc, ...state.hist.filter(v => v > 0)) / 3;
+      const hi = Math.max(1.5, p.vo / p.B * 3, ...state.hist) * 1.5;
+      return { lo: Math.max(lo, 1e-7), hi };
+    }
+    const yOf = (v, b) => M.t + (1 - (Math.log10(v) - Math.log10(b.lo)) / (Math.log10(b.hi) - Math.log10(b.lo))) * (cnv.height - M.t - M.b);
+    const xOf = (i, n) => M.l + (n <= 1 ? 0 : i / (n - 1)) * (cnv.width - M.l - M.r);
+
+    function draw() {
+      const p = P(), b = bounds(), n = state.hist.length;
+      ctx.clearRect(0, 0, cnv.width, cnv.height);
+      ctx.font = "12px ui-sans-serif, system-ui";
+
+      // decade grid
+      for (let e = Math.ceil(Math.log10(b.lo)); e <= Math.floor(Math.log10(b.hi)); e++) {
+        const y = yOf(10 ** e, b);
+        ctx.strokeStyle = "#e5e7eb"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(M.l, y); ctx.lineTo(cnv.width - M.r, y); ctx.stroke();
+        ctx.fillStyle = "#9ca3af"; ctx.textAlign = "right";
+        ctx.fillText(e >= 0 ? String(10 ** e) : "1e" + e, M.l - 8, y + 4);
+      }
+      // broken-zone shading (rv > 10x clean)
+      if (n > 1) {
+        ctx.fillStyle = "rgba(185,28,28,0.07)";
+        let i = 0;
+        while (i < n) {
+          if (state.hist[i] > 10 * p.vc) {
+            let j = i; while (j < n && state.hist[j] > 10 * p.vc) j++;
+            ctx.fillRect(xOf(i, n), M.t, xOf(Math.max(j - 1, i), n) - xOf(i, n) + 2, cnv.height - M.t - M.b);
+            i = j;
+          } else i++;
+        }
+      }
+      // healthy reference
+      const yc = yOf(p.vc, b);
+      ctx.strokeStyle = "#15803d"; ctx.setLineDash([6, 5]); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(M.l, yc); ctx.lineTo(cnv.width - M.r, yc); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = "#15803d"; ctx.textAlign = "left"; ctx.fillText("healthy (clean variance)", M.l + 6, yc - 6);
+
+      // series
+      if (n > 0) {
+        ctx.strokeStyle = "#1d4ed8"; ctx.lineWidth = 2; ctx.beginPath();
+        state.hist.forEach((v, i) => { const x = xOf(i, n), y = yOf(v, b); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+        ctx.stroke();
+        // outlier markers
+        ctx.fillStyle = "#b91c1c";
+        state.out.forEach((k, i) => { if (k) { ctx.beginPath(); ctx.arc(xOf(i, n), yOf(state.hist[i], b), 4.5, 0, 7); ctx.fill(); } });
+      }
+      // x label
+      ctx.fillStyle = "#9ca3af"; ctx.textAlign = "center";
+      ctx.fillText("batch (one forward call each)", (M.l + cnv.width - M.r) / 2, cnv.height - 8);
+
+      // readouts
+      const rv = state.rv, ratio = rv / p.vc;
+      $("roRv").textContent = n ? rv.toPrecision(3) : "—";
+      $("roRatio").textContent = n ? "×" + (ratio >= 100 ? Math.round(ratio).toLocaleString() : ratio.toFixed(1)) : "—";
+      $("roAtt").textContent = n ? "×" + Math.sqrt(Math.max(ratio, 1)).toFixed(1) : "—";
+      const rec = ratio > 10 ? Math.ceil(Math.log(ratio / 10) / -Math.log(1 - p.m)) : 0;
+      $("roRec").textContent = n ? (ratio > 10 ? String(rec) : "recovered") : "—";
+      $("roRatio").className = $("roAtt").className =
+        "text-lg font-semibold " + (ratio > 10 ? "text-rose-700" : "text-gray-800");
+      $("sigOut").textContent = sigma2(1, p).toPrecision(3);
+    }
+
+    // ---------- hover tooltip ----------
+    cnv.addEventListener("mousemove", (ev) => {
+      const n = state.hist.length; if (!n) return;
+      const r = cnv.getBoundingClientRect();
+      const x = (ev.clientX - r.left) * (cnv.width / r.width);
+      const i = Math.max(0, Math.min(n - 1, Math.round((x - M.l) / (cnv.width - M.l - M.r) * (n - 1))));
+      const p = P();
+      tip.innerHTML = `batch ${i + 1}${state.out[i] ? " — <b>outlier!</b>" : ""}<br/>σ²_batch = ${state.sig[i].toPrecision(3)}<br/>running_var = ${state.hist[i].toPrecision(3)}<br/>eval shrink ×${Math.sqrt(Math.max(state.hist[i] / p.vc, 1)).toFixed(1)}`;
+      tip.style.left = Math.min(ev.clientX - r.left + 14, r.width - 150) + "px";
+      tip.style.top = (ev.clientY - r.top + 10) + "px";
+      tip.classList.remove("hidden");
+    });
+    cnv.addEventListener("mouseleave", () => tip.classList.add("hidden"));
+
+    // ---------- wiring ----------
+    $("run").onclick = () => {
+      if (state.timer) { clearInterval(state.timer); state.timer = null; $("run").textContent = "▶ Run"; return; }
+      $("run").textContent = "⏸ Pause";
+      state.timer = setInterval(() => { for (let i = 0; i < 3; i++) stepOnce(); draw(); }, 24);
+    };
+    $("step").onclick = () => { stepOnce(); draw(); };
+    $("inject").onclick = () => { state.forced++; stepOnce(); draw(); };
+    $("reset").onclick = reset;
+    ["mom", "bsz", "prob"].forEach(id => $(id).addEventListener("input", () => {
+      $("momVal").textContent = parseFloat($("mom").value).toFixed(2);
+      $("bszVal").textContent = $("bsz").value;
+      $("probVal").textContent = parseFloat($("prob").value).toFixed(1);
+      draw();
+    }));
+    ["vclean", "vout"].forEach(id => $(id).addEventListener("input", draw));
+
+    const PRESETS = {
+      ours:     { mom: 0.1,  bsz: 36,  vclean: 0.006, vout: 12000, prob: 1 },
+      none:     { mom: 0.1,  bsz: 36,  vclean: 0.006, vout: 12000, prob: 0 },
+      mild:     { mom: 0.1,  bsz: 36,  vclean: 0.006, vout: 0.6,   prob: 5 },
+      bigbatch: { mom: 0.1,  bsz: 512, vclean: 0.006, vout: 12000, prob: 1 },
+    };
+    document.querySelectorAll(".preset").forEach(btn => btn.onclick = () => {
+      const pr = PRESETS[btn.dataset.preset];
+      Object.entries(pr).forEach(([k, v]) => { $(k).value = v; });
+      $("momVal").textContent = pr.mom.toFixed(2); $("bszVal").textContent = pr.bsz; $("probVal").textContent = pr.prob.toFixed(1);
+      reset();
+      $("run").click();
+    });
+
+    reset();
+  </script>
+</BaseLayout>

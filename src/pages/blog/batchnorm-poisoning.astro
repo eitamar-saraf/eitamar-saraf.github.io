@@ -79,6 +79,36 @@ export const frontmatter = {
       <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 3 — The driver: a detached tail of extreme-extent samples (left) whose first-layer variance grows as extent² (right).</figcaption>
     </figure>
     <p class="text-gray-700 mb-3">When one of those tail samples lands in a batch, the batch variance is dominated by it, the moving average drinks it in, and <code>running_var</code> spikes. At the next eval, every clean input gets divided by that inflated variance, the embedding collapses, and retrieval falls to chance — until enough clean batches pass for the moving average to recover. That's the see-saw.</p>
+
+    <h3 class="text-2xl font-bold mt-8 mb-2">The update, straight from the source</h3>
+    <p class="text-gray-700 mb-3">Is the buffer updated per <i>sample</i> or per <i>batch</i>? Don't take my word for it — this is PyTorch's own reference implementation of the BatchNorm kernel (trimmed from <code>torch/_decomp</code>, torch 2.9):</p>
+    <div class="bg-gray-900 text-gray-100 rounded border p-4 mb-3 text-sm md:text-base leading-relaxed overflow-x-auto font-mono">
+      <span class="text-gray-400"># stats are pooled over the BATCH dim and all points — per channel</span><br/>
+      reduction_dims = [0] + list(range(2, input.dim()))<br/>
+      biased_var, mean = torch.var_mean(input, dim=reduction_dims, correction=0)<br/>
+      <br/>
+      n = input.numel() / input.shape[1]&nbsp;&nbsp;<span class="text-gray-400"># elements pooled per channel = batch × points</span><br/>
+      unbiased_var = biased_var * (n / (n - 1))<br/>
+      new_running_var = momentum * unbiased_var + (1 - momentum) * running_var<br/>
+      running_var.copy_(new_running_var)&nbsp;&nbsp;<span class="text-gray-400"># executed ONCE per forward call</span>
+    </div>
+    <p class="text-gray-700 mb-3">So: <b>per batch, per channel — never per sample</b>. A sample doesn't get its own update it could be outvoted on; instead every sample and every point in the batch is pooled into <i>one</i> variance number, and a single giant sample dominates that number for everyone. (Two details worth noticing: normalization uses the <i>biased</i> variance, the buffer stores the <i>unbiased</i> one — and the update runs on every train-mode forward whether or not you ever call the optimizer.)</p>
+    <p class="text-gray-700 mb-3">Strip the tensor machinery away and the buffer's whole life is a fold over a list of batch variances:</p>
+    <div class="bg-gray-900 text-gray-100 rounded border p-4 mb-3 text-sm md:text-base leading-relaxed overflow-x-auto font-mono">
+      def running_var_after(batch_vars, m=0.1, rv=1.0):<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;for sigma2 in batch_vars:&nbsp;&nbsp;<span class="text-gray-400"># one EMA step per BATCH</span><br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;rv = (1 - m) * rv + m * sigma2<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;return rv<br/>
+      <br/>
+      <span class="text-gray-400"># our scenario, as a list:</span><br/>
+      running_var_after([0.006] * 200)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="text-gray-400"># → 0.006&nbsp;&nbsp;(healthy)</span><br/>
+      running_var_after([0.006] * 200 + [343])&nbsp;&nbsp;&nbsp;<span class="text-gray-400"># → 34.3&nbsp;&nbsp;&nbsp;(one poisoned batch: ×5,700)</span><br/>
+      running_var_after([0.006] * 200 + [343] + [0.006] * 22)&nbsp;&nbsp;<span class="text-gray-400"># → 3.4 — still ×570, 22 batches later</span>
+    </div>
+    <p class="text-gray-700 mb-3">The recovery is the slow part: each clean batch only multiplies the damage by <code>(1−m) = 0.9</code>, so getting from ×5,700 back under ×10 takes <code>log(570)/log(1/0.9) ≈ 60</code> clean batches. Whether a checkpoint lands inside that window is pure timing — that's the lottery.</p>
+    <div class="p-4 rounded border bg-blue-50 text-blue-900 mb-3">
+      <b>Try it yourself.</b> The <a href="/demos/bn-poisoning" class="underline font-semibold">live simulator</a> runs exactly this update with our scenario's numbers pre-loaded — momentum, batch size, outlier size and frequency are all sliders. Inject an outlier with a button and watch the buffer spike and crawl back.
+    </div>
     <div class="p-4 rounded border bg-amber-50 text-amber-900">
       <b>But if the outlier is in a training batch, why doesn't the <i>loss</i> spike too?</b> Two mechanisms conspire — and this is worth verifying with actual numbers, because neither alone would be enough. <b>First, the poisoned micro-batch's loss is capped.</b> In train mode BatchNorm normalizes the batch by its own (huge) variance, and the embeddings are L2-normalized before the contrastive loss — so the worst a collapsed micro-batch can score is roughly <i>chance level</i>, <code>ln 36 ≈ 3.6</code>, not something astronomical. <b>Second, real training averages over a large effective batch</b> — gradient accumulation over many micro-batches, usually across several GPUs — so that already-capped bump is further divided by the accumulation factor. BatchNorm's buffer gets neither protection: statistics are computed <b>per micro-batch</b> and absorbed into <code>running_var</code> at full strength. <b>The loss path is capped then diluted; the buffer path is neither.</b>
     </div>
