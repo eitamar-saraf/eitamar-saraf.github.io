@@ -28,6 +28,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       </div>
 
       <div class="border rounded-lg p-4 shadow-sm bg-white">
+        <h2 class="text-xl font-semibold mb-2">BatchNorm running_var Poisoning</h2>
+        <p class="mb-3 text-gray-700">How a few giant-scale samples silently poison BatchNorm's eval buffer — a CPU-runnable reproduction, the debugging story, and three fixes (GroupNorm, unit-box, FiLM scale conditioning).</p>
+        <ul class="list-disc list-inside space-y-1 text-blue-700">
+          <li><a href="https://github.com/eitamar-saraf/scale-bn-demo" target="_blank" rel="noopener" class="hover:underline">Repository</a></li>
+          <li><a href="/blog/batchnorm-poisoning" class="hover:underline">Writeup</a></li>
+        </ul>
+      </div>
+
+      <div class="border rounded-lg p-4 shadow-sm bg-white">
         <h2 class="text-xl font-semibold mb-2">Activation Functions Showdown</h2>
         <p class="mb-3 text-gray-700">312 runs across 8 activations and 5 tasks — which activation wins depends on your block, not your data.</p>
         <ul class="list-disc list-inside space-y-1 text-blue-700">
