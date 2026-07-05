@@ -55,6 +55,69 @@ export const frontmatter = {
       <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 2 — Relative change per tensor between a good checkpoint and the next, bad one. One BatchNorm buffer dwarfs every learnable weight.</figcaption>
     </figure>
     <p class="text-gray-700 mb-3">Same story in miniature: every learnable parameter nudges by a fraction of a percent, while one BatchNorm buffer moves by hundreds of times its own size in a single checkpoint interval — over <b>1,700× more</b> than the next-largest tensor. The rest of this post is what that buffer is, why a few training samples send it flying, and how to fix it.</p>
+    <p class="text-gray-700 mb-3">Before going further, it helps to see where that tensor lives. Here is the encoder in one strip — the poisoned buffer sits in the <b>very first normalization layer</b>, the first place raw coordinate magnitudes meet a cross-sample statistic:</p>
+    <figure class="bg-white rounded border p-2 mb-2">
+      <div class="overflow-x-auto">
+        <svg viewBox="0 0 1005 240" class="min-w-[660px] w-full" role="img" aria-label="Architecture strip of the point encoder: point cloud, global divisor, patch grouping with constant color, first conv block whose BatchNorm holds the poisoned running_var, second conv block, pooling head, L2-normalized embedding" font-family="ui-sans-serif, system-ui, sans-serif">
+          <defs>
+            <marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+            </marker>
+          </defs>
+
+          <text x="187" y="52" text-anchor="middle" font-size="11" fill="#b91c1c" font-style="italic">no per-sample clamp — outliers sail through</text>
+
+          <rect x="8" y="70" width="100" height="64" rx="8" fill="#f8fafc" stroke="#64748b"/>
+          <text x="58" y="98" text-anchor="middle" font-size="12" fill="#334155" font-weight="600">point cloud</text>
+          <text x="58" y="115" text-anchor="middle" font-size="11" fill="#64748b">N × 3</text>
+          <line x1="108" y1="102" x2="128" y2="102" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr3)"/>
+
+          <rect x="132" y="70" width="110" height="64" rx="8" fill="#fff7ed" stroke="#b45309"/>
+          <text x="187" y="98" text-anchor="middle" font-size="12" fill="#9a3412" font-weight="600">÷ global divisor</text>
+          <text x="187" y="115" text-anchor="middle" font-size="11" fill="#b45309">one shared constant</text>
+          <line x1="242" y1="102" x2="262" y2="102" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr3)"/>
+
+          <rect x="266" y="70" width="150" height="64" rx="8" fill="#f8fafc" stroke="#64748b"/>
+          <text x="341" y="92" text-anchor="middle" font-size="12" fill="#334155" font-weight="600">group into patches</text>
+          <text x="341" y="108" text-anchor="middle" font-size="11" fill="#64748b">FPS + kNN, recenter</text>
+          <text x="341" y="123" text-anchor="middle" font-size="11" fill="#64748b">+ const color → 6 ch</text>
+          <line x1="416" y1="102" x2="436" y2="102" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr3)"/>
+
+          <rect x="440" y="62" width="280" height="80" rx="8" fill="#ffffff" stroke="#334155" stroke-width="1.5"/>
+          <text x="580" y="78" text-anchor="middle" font-size="11" fill="#334155" font-weight="700">first_conv</text>
+          <rect x="448" y="86" width="60" height="44" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
+          <text x="478" y="105" text-anchor="middle" font-size="10" fill="#475569">Conv1d</text>
+          <text x="478" y="118" text-anchor="middle" font-size="10" fill="#475569">6→128</text>
+          <rect x="516" y="86" width="60" height="44" rx="5" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+          <text x="546" y="105" text-anchor="middle" font-size="10" fill="#b91c1c" font-weight="700">BatchNorm</text>
+          <text x="546" y="118" text-anchor="middle" font-size="10" fill="#b91c1c">running_var</text>
+          <rect x="584" y="86" width="60" height="44" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
+          <text x="614" y="110" text-anchor="middle" font-size="10" fill="#475569">ReLU</text>
+          <rect x="652" y="86" width="60" height="44" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
+          <text x="682" y="105" text-anchor="middle" font-size="10" fill="#475569">Conv1d</text>
+          <text x="682" y="118" text-anchor="middle" font-size="10" fill="#475569">→256</text>
+          <line x1="720" y1="102" x2="740" y2="102" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr3)"/>
+
+          <rect x="744" y="70" width="110" height="64" rx="8" fill="#f8fafc" stroke="#64748b"/>
+          <text x="799" y="98" text-anchor="middle" font-size="12" fill="#334155" font-weight="600">second block</text>
+          <text x="799" y="115" text-anchor="middle" font-size="11" fill="#64748b">conv · BN · pool</text>
+          <line x1="854" y1="102" x2="874" y2="102" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr3)"/>
+
+          <rect x="878" y="70" width="119" height="64" rx="8" fill="#f0fdf4" stroke="#15803d"/>
+          <text x="937" y="92" text-anchor="middle" font-size="12" fill="#166534" font-weight="600">head</text>
+          <text x="937" y="108" text-anchor="middle" font-size="11" fill="#16a34a">pool → MLP</text>
+          <text x="937" y="123" text-anchor="middle" font-size="11" fill="#16a34a">→ L2-norm</text>
+
+          <text x="341" y="170" text-anchor="middle" font-size="11" fill="#64748b" font-style="italic">constant color 0.4 enters here — the leak's anchor</text>
+          <text x="580" y="192" text-anchor="middle" font-size="11.5" fill="#b91c1c" font-weight="700">running_var lives HERE — the buffer from Fig. 2,</text>
+          <text x="580" y="208" text-anchor="middle" font-size="11.5" fill="#b91c1c">first place raw magnitudes meet a cross-sample statistic</text>
+          <text x="799" y="170" text-anchor="middle" font-size="11" fill="#64748b" font-style="italic">its BN gets hit too — ~100× less</text>
+          <text x="997" y="192" text-anchor="end" font-size="11" fill="#166534" font-style="italic">L2-norm caps a poisoned batch's loss</text>
+          <line x1="546" y1="134" x2="562" y2="178" stroke="#b91c1c" stroke-width="1.2" stroke-dasharray="3,3"/>
+        </svg>
+      </div>
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 3 — The encoder in one strip. The poisoned buffer sits in the first normalization layer; the constant color that powers the leak enters at grouping; the final L2-norm is why a poisoned batch's <i>loss</i> stays capped.</figcaption>
+    </figure>
   </section>
 
   <section id="hidden-buffer" class="mt-10">
@@ -76,7 +139,7 @@ export const frontmatter = {
     <p class="text-gray-700 mb-3">The first convolution turns large coordinates into large activations, and variance grows with the <i>square</i> of the spread. The left panel below shows the distribution of per-sample extent (how far the coordinates reach after normalization) on a <b>log₁₀</b> axis: a healthy bulk at log₁₀ ≈ 0 (extent ≈ 1), with a detached tail of outliers out near log₁₀ ≈ 3–4 — that is, extent in the <b>thousands to ten-thousands</b>. The right panel plots the resulting first-layer variance against the raw extent (both axes log-scaled) — a clean <code>variance ∝ extent²</code> line, with the tail samples sitting at variances five to eight orders of magnitude above the bulk.</p>
     <figure class="bg-white rounded border p-2 mb-2">
       <img src="/plots/batchnorm-poisoning/data_diagnostic.png" alt="Left: histogram of per-sample extent with a long outlier tail. Right: first-conv variance grows as extent squared." class="w-full rounded" />
-      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 3 — The driver: a detached tail of extreme-extent samples (left) whose first-layer variance grows as extent² (right).</figcaption>
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 4 — The driver: a detached tail of extreme-extent samples (left) whose first-layer variance grows as extent² (right).</figcaption>
     </figure>
     <p class="text-gray-700 mb-3">When one of those tail samples lands in a batch, the batch variance is dominated by it, the moving average drinks it in, and <code>running_var</code> spikes. At the next eval, every clean input gets divided by that inflated variance, the embedding collapses, and retrieval falls to chance — until enough clean batches pass for the moving average to recover. That's the see-saw.</p>
 
@@ -183,7 +246,7 @@ export const frontmatter = {
           <text x="357" y="352" text-anchor="middle" font-size="12" fill="#64748b" font-style="italic">no loss term pushes on this — training is blind to it</text>
         </svg>
       </div>
-      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 4 — One outlier micro-batch, two paths. Its gradient is averaged away (top), but its variance enters the <code>running_var</code> EMA at full strength (bottom).</figcaption>
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 5 — One outlier micro-batch, two paths. Its gradient is averaged away (top), but its variance enters the <code>running_var</code> EMA at full strength (bottom).</figcaption>
     </figure>
   </section>
 
@@ -207,7 +270,7 @@ export const frontmatter = {
 
     <figure class="bg-white rounded border p-2 mb-2">
       <img src="/plots/batchnorm-poisoning/four_variants.png" alt="Four-panel comparison: running_var, eval MRR, embedding-collapse indicator, and size discrimination across the four variants." class="w-full rounded" />
-      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 5 — The four variants: <code>running_var</code>, eval MRR, embedding-collapse indicator, and 3&nbsp;mm-vs-4&nbsp;mm separation.</figcaption>
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 6 — The four variants: <code>running_var</code>, eval MRR, embedding-collapse indicator, and 3&nbsp;mm-vs-4&nbsp;mm separation.</figcaption>
     </figure>
 
     <h3 id="fix-1" class="text-2xl font-bold mt-8 mb-2">Fix&nbsp;1 — GroupNorm: delete the poisoned buffer</h3>
@@ -227,13 +290,13 @@ export const frontmatter = {
       </table>
     </div>
 
-    <p class="text-gray-700 mb-3"><b>Why it's a fix.</b> Recall the failure chain: outlier → shared batch σ² → EMA buffer → checkpoint → eval divides clean inputs by garbage. Every link needs something in BatchNorm's column. GroupNorm has no shared statistic to contaminate, no buffer to store the damage in, and no separate eval path to replay it — three links of the chain aren't weakened, they're <i>gone</i>. The see-saw doesn't shrink; it ceases to exist (the orange curve in Fig.&nbsp;5 is flat). This is the one-line change that actually shipped, and if stability is all you need, you can stop here.</p>
+    <p class="text-gray-700 mb-3"><b>Why it's a fix.</b> Recall the failure chain: outlier → shared batch σ² → EMA buffer → checkpoint → eval divides clean inputs by garbage. Every link needs something in BatchNorm's column. GroupNorm has no shared statistic to contaminate, no buffer to store the damage in, and no separate eval path to replay it — three links of the chain aren't weakened, they're <i>gone</i>. The see-saw doesn't shrink; it ceases to exist (the orange curve in Fig.&nbsp;6 is flat). This is the one-line change that actually shipped, and if stability is all you need, you can stop here.</p>
 
     <div class="p-4 rounded border bg-rose-50 text-rose-900 mb-3">
       <b>Still not perfect (1): the outliers are still there.</b> GroupNorm removes the <i>transmission channel</i>, not the disease. A kilometer-scale "part" still slams the first conv with enormous coordinates on its own forward pass — the occasional gradient spike stays, and the model still spends capacity on garbage geometry. The immunity is also exactly one refactor deep: reintroduce any cross-sample statistic, anywhere, and the bug is back.
     </div>
     <div class="p-4 rounded border bg-rose-50 text-rose-900 mb-3">
-      <b>Still not perfect (2): it quietly deletes a feature we need.</b> Per-sample normalization (GroupNorm, LayerNorm, InstanceNorm alike) is scale-invariant by construction — <code>norm(s·x) = norm(x)</code> — so GroupNorm <i>cannot</i> represent absolute size. That should bother you, because the bottom-right panel of Fig.&nbsp;5 shows <code>global + GroupNorm</code> scoring <b>0.46</b> at telling a 3&nbsp;mm part from a 4&nbsp;mm one. Where does a scale-blind layer get scale from? A <b>leak</b> — an accidental fixed reference inside the network, which the next subsection derives exactly. And the leak can't be saved: patch it in place (constant color → 0, conv bias off, global divisor untouched) and the 0.46 collapses to <b>0.00</b>; switch to unit-box normalization and it's <b>0.00</b> again. The scale-awareness was never a representation — it was an accident, and every way of cleaning up the accident leaves the model blind.
+      <b>Still not perfect (2): it quietly deletes a feature we need.</b> Per-sample normalization (GroupNorm, LayerNorm, InstanceNorm alike) is scale-invariant by construction — <code>norm(s·x) = norm(x)</code> — so GroupNorm <i>cannot</i> represent absolute size. That should bother you, because the bottom-right panel of Fig.&nbsp;6 shows <code>global + GroupNorm</code> scoring <b>0.46</b> at telling a 3&nbsp;mm part from a 4&nbsp;mm one. Where does a scale-blind layer get scale from? A <b>leak</b> — an accidental fixed reference inside the network, which the next subsection derives exactly. And the leak can't be saved: patch it in place (constant color → 0, conv bias off, global divisor untouched) and the 0.46 collapses to <b>0.00</b>; switch to unit-box normalization and it's <b>0.00</b> again. The scale-awareness was never a representation — it was an accident, and every way of cleaning up the accident leaves the model blind.
     </div>
 
     <h3 id="the-leak" class="text-2xl font-bold mt-8 mb-2">Why only <i>partly</i>? Where the leak comes from</h3>
@@ -334,7 +397,7 @@ export const frontmatter = {
           </text>
         </svg>
       </div>
-      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 6 — Decoupled: a scale-invariant shape path plus an explicit scale path, merged by FiLM.</figcaption>
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 7 — Decoupled: a scale-invariant shape path plus an explicit scale path, merged by FiLM.</figcaption>
     </figure>
     <p class="text-gray-700 mb-3"><b>Why it's a fix.</b> It <b>decouples shape from scale</b>: geometry stays scale-invariant and robust, while scale enters through a separate, controllable path rather than an accidental leak. The result (<code>unitbb + GN + FiLM</code>, green) is the best of both worlds — rock-stable <i>and</i> the strongest size discrimination of any variant (0.91 vs 0.00), with the best retrieval too.</p>
     <div class="p-4 rounded border bg-rose-50 text-rose-900 mb-3">
