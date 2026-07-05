@@ -164,20 +164,18 @@ export const frontmatter = {
           <text x="799" y="115" text-anchor="middle" font-size="11" fill="#64748b">conv · BN · pool</text>
           <line x1="854" y1="102" x2="874" y2="102" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr3)"/>
 
-          <rect x="878" y="70" width="119" height="64" rx="8" fill="#f0fdf4" stroke="#15803d"/>
-          <text x="937" y="92" text-anchor="middle" font-size="12" fill="#166534" font-weight="600">head</text>
-          <text x="937" y="108" text-anchor="middle" font-size="11" fill="#16a34a">pool → MLP</text>
-          <text x="937" y="123" text-anchor="middle" font-size="11" fill="#16a34a">→ L2-norm</text>
+          <rect x="878" y="70" width="119" height="64" rx="8" fill="#f8fafc" stroke="#64748b"/>
+          <text x="937" y="92" text-anchor="middle" font-size="12" fill="#334155" font-weight="600">head</text>
+          <text x="937" y="108" text-anchor="middle" font-size="11" fill="#64748b">pool → MLP</text>
+          <text x="937" y="123" text-anchor="middle" font-size="11" fill="#64748b">→ L2-norm</text>
 
-          <text x="341" y="170" text-anchor="middle" font-size="11" fill="#64748b" font-style="italic">constant color 0.4 enters here — the leak's anchor</text>
           <text x="580" y="192" text-anchor="middle" font-size="11.5" fill="#b91c1c" font-weight="700">running_var lives HERE — the buffer from Fig. 3,</text>
           <text x="580" y="208" text-anchor="middle" font-size="11.5" fill="#b91c1c">first place raw magnitudes meet a cross-sample statistic</text>
-          <text x="799" y="170" text-anchor="middle" font-size="11" fill="#64748b" font-style="italic">its BN gets hit too — ~100× less</text>
-          <text x="997" y="192" text-anchor="end" font-size="11" fill="#166534" font-style="italic">L2-norm caps a poisoned batch's loss</text>
+          <text x="799" y="170" text-anchor="middle" font-size="11" fill="#64748b" font-style="italic">its BN gets hit too — the runner-up bar in Fig. 3</text>
           <line x1="546" y1="134" x2="562" y2="178" stroke="#b91c1c" stroke-width="1.2" stroke-dasharray="3,3"/>
         </svg>
       </div>
-      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 4 — Fig. 2 again, with the investigation's findings marked: the poisoned buffer in the first normalization layer, the constant color that powers the leak, and the L2-norm that keeps a poisoned batch's <i>loss</i> capped.</figcaption>
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 4 — Fig. 2 again, with the crime scene marked: the exploding buffer from Fig. 3 sits in the <i>first</i> normalization layer — the first place raw coordinate magnitudes meet a statistic shared across samples. The second block's BN (the runner-up bar) is hit far less.</figcaption>
     </figure>
   </section>
 
