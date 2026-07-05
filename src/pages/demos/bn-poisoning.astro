@@ -41,6 +41,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             <input id="syncbn" type="checkbox" class="rounded" />
             <span class="text-gray-600">SyncBN <span class="text-gray-400">(pool stats across all GPUs)</span></span>
           </label>
+          <p class="text-xs text-gray-500 -mt-1">SyncBN pools over G·B samples: the clean level is unchanged (it's the <i>data</i> variance, not the mean's), spikes get ÷G shallower — but an outlier on <i>any</i> rank now hits the one shared buffer, so hits are ×G more frequent. Net: usually <i>more</i> broken checkpoints.</p>
           <label class="block">
             <span class="text-gray-600">clean per-sample variance</span>
             <input id="vclean" type="number" min="0.0001" step="0.001" value="0.006" class="mt-1 w-full border rounded px-2 py-1" />
