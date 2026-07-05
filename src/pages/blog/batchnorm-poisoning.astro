@@ -211,14 +211,29 @@ export const frontmatter = {
     </figure>
 
     <h3 id="fix-1" class="text-2xl font-bold mt-8 mb-2">Fix&nbsp;1 — GroupNorm: delete the poisoned buffer</h3>
-    <p class="text-gray-700 mb-3"><b>What it does.</b> The bug lived in a shared, eval-time buffer, so the most direct fix is a normalization that has no such buffer. <a href="https://arxiv.org/abs/1803.08494" target="_blank" rel="noopener" class="text-blue-700 hover:underline"><b>GroupNorm</b></a> (orange) normalizes <i>within each sample</i> across channel groups — using only that sample's own statistics, at both train and eval. It keeps no running average of anything.</p>
-    <p class="text-gray-700 mb-3"><b>Why it's a fix.</b> With no <code>running_var</code> to accumulate, there is nothing for an outlier batch to poison; train-mode and eval-mode compute the identical thing, and the see-saw disappears (orange, flat). It's a one-line layer swap and it's the fix that actually shipped. If all you need is stability, you can stop here.</p>
+    <p class="text-gray-700 mb-3"><b>What it does.</b> Swap the BatchNorm after the first conv for <a href="https://arxiv.org/abs/1803.08494" target="_blank" rel="noopener" class="text-blue-700 hover:underline"><b>GroupNorm</b></a>. One line. Both layers do the same arithmetic — subtract a mean, divide by a standard deviation — the entire difference is <i>where those two numbers come from</i>:</p>
+
+    <div class="overflow-x-auto mb-3">
+      <table class="w-full text-sm md:text-base border-collapse">
+        <thead><tr class="border-b text-left">
+          <th class="py-2 pr-4"></th><th class="py-2 pr-4">BatchNorm</th><th class="py-2">GroupNorm</th>
+        </tr></thead>
+        <tbody class="text-gray-700 align-top">
+          <tr class="border-b"><td class="py-2 pr-4">μ, σ² come from</td><td class="py-2 pr-4">the <b>whole batch</b> — one σ² per channel, shared by every sample</td><td class="py-2">each sample's <b>own</b> features, in small channel groups</td></tr>
+          <tr class="border-b"><td class="py-2 pr-4">one giant sample…</td><td class="py-2 pr-4 text-rose-700">poisons the shared σ² for its whole batch</td><td class="py-2 text-emerald-700">affects only itself</td></tr>
+          <tr class="border-b"><td class="py-2 pr-4">at eval time</td><td class="py-2 pr-4 text-rose-700">a <i>different</i> code path: divide by the stored <code>running_var</code></td><td class="py-2 text-emerald-700">identical computation to training</td></tr>
+          <tr><td class="py-2 pr-4">hidden state</td><td class="py-2 pr-4 text-rose-700"><code>running_mean</code> / <code>running_var</code> — the EMA buffer this whole post is about</td><td class="py-2 text-emerald-700"><b>none</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="text-gray-700 mb-3"><b>Why it's a fix.</b> Recall the failure chain: outlier → shared batch σ² → EMA buffer → checkpoint → eval divides clean inputs by garbage. Every link needs something in BatchNorm's column. GroupNorm has no shared statistic to contaminate, no buffer to store the damage in, and no separate eval path to replay it — three links of the chain aren't weakened, they're <i>gone</i>. The see-saw doesn't shrink; it ceases to exist (the orange curve in Fig.&nbsp;5 is flat). This is the one-line change that actually shipped, and if stability is all you need, you can stop here.</p>
 
     <div class="p-4 rounded border bg-rose-50 text-rose-900 mb-3">
-      <b>Still not perfect (1): it patches the propagation, not the source.</b> The outliers are still in the data, and a meter-scale part still produces enormous activations on its own forward pass. GroupNorm only stops that from leaking into a shared buffer — the occasional grad-norm spike remains, and any refactor that reintroduces a cross-sample statistic brings the bug straight back.
+      <b>Still not perfect (1): the outliers are still there.</b> GroupNorm removes the <i>transmission channel</i>, not the disease. A kilometer-scale "part" still slams the first conv with enormous coordinates on its own forward pass — the occasional gradient spike stays, and the model still spends capacity on garbage geometry. The immunity is also exactly one refactor deep: reintroduce any cross-sample statistic, anywhere, and the bug is back.
     </div>
     <div class="p-4 rounded border bg-rose-50 text-rose-900 mb-3">
-      <b>Still not perfect (2): the scale it seems to keep is an accident.</b> Like every per-sample normalization (LayerNorm and InstanceNorm too), GroupNorm is <b>scale-invariant by construction</b>: <code>norm(s·x) = norm(x)</code>. So the 0.46 size-discrimination it shows above shouldn't exist at all — it survives only through a leak, which the next subsection pins down exactly. And here's the trap: <b>fix the leak and it goes blind — even if you keep global normalization</b>. Patch the leak in place (constant color → 0, first-conv bias off, global divisor untouched) and the size-margin collapses to <b>0.00</b>; switch to per-sample <b>unit-box</b> normalization instead and a 3&nbsp;mm and a 4&nbsp;mm version of the same shape become identical inputs — also <b>0.00</b> (blue, bottom-right panel). Both roads end blind, because the scale was never <i>represented</i> — it was riding on an accident you can't keep and can't fix. Stable, but (one cleanup away from) blind.
+      <b>Still not perfect (2): it quietly deletes a feature we need.</b> Per-sample normalization (GroupNorm, LayerNorm, InstanceNorm alike) is scale-invariant by construction — <code>norm(s·x) = norm(x)</code> — so GroupNorm <i>cannot</i> represent absolute size. That should bother you, because the bottom-right panel of Fig.&nbsp;5 shows <code>global + GroupNorm</code> scoring <b>0.46</b> at telling a 3&nbsp;mm part from a 4&nbsp;mm one. Where does a scale-blind layer get scale from? A <b>leak</b> — an accidental fixed reference inside the network, which the next subsection derives exactly. And the leak can't be saved: patch it in place (constant color → 0, conv bias off, global divisor untouched) and the 0.46 collapses to <b>0.00</b>; switch to unit-box normalization and it's <b>0.00</b> again. The scale-awareness was never a representation — it was an accident, and every way of cleaning up the accident leaves the model blind.
     </div>
 
     <h3 id="the-leak" class="text-2xl font-bold mt-8 mb-2">Why only <i>partly</i>? Where the leak comes from</h3>
