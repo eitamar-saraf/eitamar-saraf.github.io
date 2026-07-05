@@ -37,16 +37,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         </div>
       </a>
 
-      <div class="group block rounded-xl overflow-hidden border-2 border-dashed border-yellow-400 bg-yellow-50 shadow-sm">
-        <div class="h-32 sm:h-36 md:h-40 bg-yellow-100 overflow-hidden flex items-center justify-center">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707.707M12 21v-1m-6.364-1.636l.707-.707" /></svg>
+      <a href="/blog/activation-functions-showdown" class="group block rounded-xl overflow-hidden border bg-white shadow-sm hover:shadow-md transition-shadow">
+        <div class="h-32 sm:h-36 md:h-40 bg-gray-100 overflow-hidden flex items-center justify-center">
+          <img src="/plots/act-bench/card.png" alt="Cross-task activation ranking heatmap" class="max-h-full max-w-full object-contain group-hover:scale-[1.02] transition-transform duration-200" loading="lazy" />
         </div>
         <div class="p-4">
-          <h2 class="text-lg font-semibold mb-1">Activation Functions Showdown <span class="text-sm font-medium text-yellow-600">(WIP)</span></h2>
-          <p class="text-sm text-gray-600">Comparing tanh, ReLU, GELU, and more on vision & NLP tasks. <a href="https://github.com/eitamar-saraf/act-bench" target="_blank" rel="noopener" class="text-blue-700 hover:underline">Follow progress →</a></p>
+          <h2 class="text-lg font-semibold mb-1">The Activation-Function Ranking Depends On Your Block, Not Your Data</h2>
+          <p class="text-sm text-gray-600">312 runs across 8 activations and 5 tasks: SwiGLU wins every transformer, and "tanh saturates" turns out to be the wrong story.</p>
         </div>
-      </div>
-      
+      </a>
+
     </div>
     <div class="mt-10 text-sm text-gray-600">
       <a href="/blog_posts" class="text-blue-700 hover:underline">See my list of blog post ideas →</a>
