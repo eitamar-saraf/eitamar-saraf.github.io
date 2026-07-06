@@ -2,13 +2,13 @@
 import BlogPostLayout from '../../layouts/BlogPostLayout.astro';
 
 export const frontmatter = {
-  title: 'When One Giant Sample Breaks BatchNorm',
+  title: 'When One Giant Sample Breaks BatchNorm — and How AI Agents Helped Find It',
   pubDate: '2026-06-30',
 };
 ---
 
 <BlogPostLayout frontmatter={frontmatter}>
-  <p class="mb-6 text-gray-700">A 3D point-cloud retrieval model I was training had a maddening symptom: its evaluation score lurched between great and broken on checkpoints saved minutes apart, while the training loss curve looked perfectly smooth the whole time. The culprit turned out to be a single buffer inside <b>BatchNorm</b> that the loss never sees, poisoned by a handful of extreme-scale training samples — but it took a string of dead ends to find. This post retraces the hunt (false leads and all), then reproduces the whole thing from scratch on synthetic data and walks through three fixes. If you know roughly what BatchNorm and a training loop are, you have enough to follow along.</p>
+  <p class="mb-6 text-gray-700">A 3D point-cloud retrieval model I was training had a maddening symptom: its evaluation score lurched between great and broken on checkpoints saved minutes apart, while the training loss curve looked perfectly smooth the whole time. The culprit turned out to be a single buffer inside <b>BatchNorm</b> that the loss never sees, poisoned by a handful of extreme-scale training samples — but it took a string of dead ends, and <b>three differently-framed AI-agent sessions</b>, to find. This post retraces the hunt (false leads and all), including how the agent sessions were set up — because the setup turned out to matter more than the agent — then reproduces the whole thing from scratch on synthetic data and walks through three fixes. If you know roughly what BatchNorm and a training loop are, you have enough to follow along.</p>
 
   <div class="mb-6 p-4 rounded border bg-blue-50 text-blue-900">
     <b>TL;DR.</b> BatchNorm keeps a hidden <code>running_var</code> buffer that it uses at eval time. It updates by a running average of per-batch variance — <i>not</i> by gradient descent — so the loss is blind to it. A few giant-scale outliers (think a building modeled in millimeters) blow up the variance of the first conv layer; whichever checkpoint you save right after such a batch divides every clean input by a hugely inflated number and collapses. Swapping BatchNorm for <b>GroupNorm</b> removes the buffer and the instability — but it also erases the model's sense of absolute scale, so I had to add that back explicitly with a small <b>FiLM</b> conditioning path.
@@ -19,6 +19,7 @@ export const frontmatter = {
     <ol class="list-decimal list-inside space-y-0.5">
       <li><a href="#mystery" class="text-blue-700 hover:underline">The mystery: training looked perfect, evaluation didn't</a></li>
       <li><a href="#background" class="text-blue-700 hover:underline">Background: the task, the data, the encoder</a></li>
+      <li><a href="#the-hunt" class="text-blue-700 hover:underline">The hunt: three agent sessions</a></li>
       <li><a href="#breakthrough" class="text-blue-700 hover:underline">The breakthrough: diff the checkpoints</a></li>
       <li><a href="#hidden-buffer" class="text-blue-700 hover:underline">The hidden buffer</a></li>
       <li><a href="#why-outliers" class="text-blue-700 hover:underline">Why a few outliers poison it</a></li>
@@ -43,7 +44,7 @@ export const frontmatter = {
       <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 1 — The symptom: loss and gradients look healthy while the eval metric crashes and recovers between checkpoints.</figcaption>
     </figure>
     <p class="text-gray-700 mb-3"><b>Top — training loss:</b> smooth and converging, <i>zero</i> spikes. <b>Middle — gradient norm:</b> a few spikes early on, but those are routine and easy to wave off. <b>Bottom — validation retrieval MRR:</b> the only thing that misbehaves — it crashes almost to zero at scattered checkpoints and pops back to its baseline at the next one, with no pattern. The loss you'd normally trust says everything is fine; only the eval, computed on separate checkpoints, betrays the problem — and it gives no clue as to <i>why</i>.</p>
-    <p class="text-gray-700 mb-3">So we turned to the obvious suspect: the <i>evaluation code</i>. Maybe the metric itself was flaky — a data-loading race, a stale cache, nondeterminism in the retrieval index, an off-by-one in how pairs were scored. We had an AI coding agent read the <b>entire</b> eval pipeline end to end, hunting for anything that could make a good model look broken or score differently from one run to the next. It came back empty: the eval code was correct. The model really <i>was</i> collapsing at those checkpoints — and nothing we were logging explained it.</p>
+    <p class="text-gray-700 mb-3">So we started hunting — first through the training pipeline, then through the evaluation code. The hunt was done with AI coding agents across three differently-framed sessions, and it taught me as much about <i>working with agents</i> as about BatchNorm; it gets its own section below. The short version: everything anyone checked was either correct or a minor real bug whose fix changed nothing. The model really <i>was</i> collapsing at those checkpoints — and nothing we were logging explained it.</p>
   </section>
 
   <section id="background" class="mt-10">
@@ -106,9 +107,26 @@ export const frontmatter = {
     </figure>
   </section>
 
+  <section id="the-hunt" class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">The hunt: three agent sessions</h2>
+    <p class="text-gray-700 mb-3">This bug was found working with AI coding agents — but not in the "ask once, get the answer" way. It took three sessions, and <b>how each session was framed mattered more than what the agent could do</b>.</p>
+
+    <p class="text-gray-700 mb-3"><b>Session 1 — audit the training pipeline.</b> The first agent got the training code and the symptom, and did what a careful engineer would: attacked the obvious suspects. Different random seeds. A different point-sampling method. A pile of small, real issues found and fixed along the way. Every change was plausible; none moved the needle. The see-saw didn't care.</p>
+
+    <p class="text-gray-700 mb-3"><b>Session 2 — tear apart the evaluation.</b> A fresh session got the opposite brief: assume training is fine and take the eval side apart. Compare the eval path against the train path line by line — did we miss something? Are <i>all</i> the weights actually being loaded? Is anything in the pipeline nondeterministic? It found real things, and fixing them made the eval properly deterministic: run-to-run noise that used to wobble the metric by a few points collapsed to a fixed value (think "MRR bounces between 0.05 and 0.10" becoming a stable 0.06). That mattered later — with the noise gone, the checkpoint-to-checkpoint crashes stood out clean and unarguable. But the crashes themselves? Untouched.</p>
+
+    <p class="text-gray-700 mb-3"><b>The handoff.</b> Two dead ends produce a lot of hard-won knowledge that's easy to lose. So the second session's final task was to write <i>everything</i> down — every finding, every fix, every hypothesis tried and killed, every open lead — into one long, brutally technical markdown file.</p>
+
+    <div class="p-4 rounded border bg-blue-50 text-blue-900 mb-3">
+      <b>Session 3 — trust nothing, go wild.</b> A brand-new session got the symptom, the markdown file, and one crucial framing: <i>"a junior researcher wrote this — I don't trust him, and the findings look flaky. Don't believe anything in that file. Explore the problem bottom-up and verify everything yourself."</i> Instead of curated summaries it got raw artifacts: the wandb run, the directory of checkpoints, the training logs — and permission to go wild.
+    </div>
+
+    <p class="text-gray-700 mb-3">That framing is the whole trick. Hand an agent the previous sessions' conclusions as <i>truth</i> and it inherits their blind spots — both earlier sessions had stared at <i>code</i>, so a trusting successor would have stared at code too. Handing the same document over as <i>claims to be attacked</i> forced the third session to re-derive the problem from the raw artifacts instead. It went to the checkpoints themselves — the one place nobody had looked — and came back with the blunt idea the next section opens with.</p>
+  </section>
+
   <section id="breakthrough" class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">The breakthrough: stop watching metrics, diff the checkpoints</h2>
-    <p class="text-gray-700 mb-3">If the model trains fine but some saved checkpoints are broken, then <i>something must be physically different</i> about those checkpoints. The idea that finally cracked it (from the same AI agent, after the eval-code dead end) was almost too blunt to take seriously: stop staring at curves and just <b>diff the weights</b>. For every tensor in the model, measure how much it changed from a good checkpoint to the next, bad one — relative to its own size, <code>‖ΔW‖ / ‖W‖</code> — and sort.</p>
+    <p class="text-gray-700 mb-3">If the model trains fine but some saved checkpoints are broken, then <i>something must be physically different</i> about those checkpoints. The idea that finally cracked it — from the third, trust-nothing session, digging through the raw checkpoint directory — was almost too blunt to take seriously: stop staring at curves and just <b>diff the weights</b>. For every tensor in the model, measure how much it changed from a good checkpoint to the next, bad one — relative to its own size, <code>‖ΔW‖ / ‖W‖</code> — and sort.</p>
     <p class="text-gray-700 mb-3">One entry detonated off the chart — its relative change was about <b>3,000× larger</b> than the next tensor's (a five-order-of-magnitude span over the run). And it wasn't a weight at all: it was <code>first_conv.running_var</code>, a <b>buffer</b> inside the first BatchNorm layer — something gradient descent, and therefore the loss, never touches.</p>
     <p class="text-gray-700 mb-3">That single line is the whole bug. The minimal reproduction from the opening lets us watch it happen safely: diff two of <i>its</i> adjacent checkpoints tensor-by-tensor and the same fingerprint appears — one buffer towers over every learnable parameter:</p>
     <figure class="bg-white rounded border p-2 mb-2">
@@ -473,6 +491,7 @@ export const frontmatter = {
       <li>GroupNorm removes the instability for free, but it (and every per-sample norm) is scale-invariant — if absolute scale matters to you, you have to inject it back deliberately.</li>
       <li>FiLM conditioning on a log-scale Fourier embedding is a clean way to do that: shape stays scale-invariant and stable; scale becomes its own bounded, explicit signal.</li>
       <li>None of these fixes clean the <i>data</i>. Genuine unit-error uploads (a house modeled in kilometers) still belong filtered upstream — separate from <i>legitimately</i> huge parts, which unit-box and FiLM handle fine. "Fix the norm layer" and "fix the dataset" are different jobs.</li>
+      <li>The agent workflow that cracked it: one session per hypothesis; have each session dump its findings into a technical file; then hand that file to a <i>fresh</i> session framed as untrusted notes ("verify bottom-up, believe nothing") along with raw artifacts — the tracker run, the checkpoints, the logs — not summaries. Inherited conclusions carry inherited blind spots.</li>
     </ul>
   </section>
 
