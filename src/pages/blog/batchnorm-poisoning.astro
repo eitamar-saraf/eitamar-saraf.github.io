@@ -49,9 +49,9 @@ export const frontmatter = {
 
   <section id="background" class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Background: the task, the data, the encoder</h2>
-    <p class="text-gray-700 mb-3">Before the hunt, a minute of context on what's actually being trained. <b>The task is text-to-3D retrieval for CAD parts:</b> type a description — "M4 hex-socket bolt, 20&nbsp;mm" — and get the right part back from a library of hundreds of thousands of models. Training is contrastive, CLIP-style: the point-cloud encoder learns to place each part's embedding next to a text embedding of that part's description.</p>
-    <p class="text-gray-700 mb-3"><b>The data is community-uploaded CAD.</b> Each model's mesh is sampled into a point cloud of a few thousand points. Two properties matter for this story. First, <b>absolute size is a real feature</b>: an M3 and an M4 bolt are different parts, and the text teacher knows it — so the pipeline normalizes every cloud by <i>one dataset-wide constant</i> instead of rescaling each part individually, on purpose, to keep size differences visible to the encoder. Second, the data is <i>wild</i>: parts range from millimeter-scale screws to ships, bridges, and whole site plans — with the occasional unit mix-up on top.</p>
-    <p class="text-gray-700 mb-3"><b>The encoder is a standard patch-based point-cloud network:</b> divide by the global constant, group the cloud into local patches (farthest-point-sampled centers + k-nearest neighbors, recentered; a constant color channel pads xyz to 6 input channels), push each patch through two small conv blocks, pool patches into tokens, and pool tokens through an MLP head into an L2-normalized embedding. Each conv block contains a BatchNorm layer — ordinary, standard-issue. Keep an eye on those.</p>
+    <p class="text-gray-700 mb-3">A minute of context — kept generic, because the specifics of the system don't matter to the bug. The setting is <b>3D shape retrieval</b>: a point-cloud encoder is trained contrastively, CLIP-style, so each shape's embedding lands next to a text embedding of its description. At evaluation you query by text and retrieve shapes; the score is a retrieval metric (MRR) — the number that was see-sawing.</p>
+    <p class="text-gray-700 mb-3">Two things about the <i>inputs</i> drive this story. First, <b>physical scale is a real, wanted signal</b> — a 3&nbsp;mm and a 4&nbsp;mm version of a part are different things — so the clouds are normalized by a <i>single shared constant</i> rather than each rescaled into its own unit box; absolute size survives normalization by design. Second, the inputs <b>span a huge range of scale</b>, from tiny parts to building-sized models, with the occasional bad unit conversion on top. A single shared divisor has no per-sample clamp, so those giant inputs stay giant after "normalization." Hold that thought.</p>
+    <p class="text-gray-700 mb-3">The encoder is an ordinary patch-based point network: group the cloud into local patches, run each through a couple of small conv blocks, and pool down to one L2-normalized embedding. The only detail that matters later is that the conv blocks normalize with <b>BatchNorm</b> — the standard, unremarkable choice. Keep an eye on it.</p>
     <figure class="bg-white rounded border p-2 mb-2">
       <div class="overflow-x-auto">
         <svg viewBox="0 0 1005 150" class="min-w-[660px] w-full" role="img" aria-label="Architecture strip of the point encoder: point cloud, global divisor, patch grouping with constant color, first conv block with BatchNorm, second conv block, pooling head, L2-normalized embedding" font-family="ui-sans-serif, system-ui, sans-serif">
@@ -103,7 +103,7 @@ export const frontmatter = {
           <text x="937" y="93" text-anchor="middle" font-size="11" fill="#64748b">→ L2-norm</text>
         </svg>
       </div>
-      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 2 — The point-cloud encoder, plain and unremarkable. Trained contrastively against text embeddings of the part descriptions.</figcaption>
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 2 — The point-cloud encoder, plain and unremarkable. Trained contrastively against text embeddings of the shape descriptions.</figcaption>
     </figure>
   </section>
 
