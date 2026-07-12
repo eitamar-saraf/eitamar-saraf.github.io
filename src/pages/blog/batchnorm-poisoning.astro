@@ -8,7 +8,7 @@ export const frontmatter = {
 ---
 
 <BlogPostLayout frontmatter={frontmatter}>
-  <p class="mb-6 text-gray-700">A 3D point-cloud retrieval model I was training had a maddening symptom: its evaluation score lurched between great and broken on checkpoints saved minutes apart, while the training loss curve looked perfectly smooth the whole time. The culprit turned out to be a single buffer inside <b>BatchNorm</b> that the loss never sees, poisoned by a handful of extreme-scale training samples — but it took a string of dead ends, and <b>three differently-framed AI-agent sessions</b>, to find. This post retraces the hunt (false leads and all), including how the agent sessions were set up — because the setup turned out to matter more than the agent — then reproduces the whole thing from scratch on synthetic data and walks through three fixes. If you know roughly what BatchNorm and a training loop are, you have enough to follow along.</p>
+  <p class="mb-6 text-gray-700">A 3D retrieval model I was training had a maddening symptom: its evaluation score lurched between great and broken on checkpoints saved minutes apart, while the training loss curve looked perfectly smooth the whole time. The culprit turned out to be a single buffer inside <b>BatchNorm</b> that the loss never sees, poisoned by a handful of extreme-scale training samples — but it took a string of dead ends, and <b>three differently-framed AI-agent sessions</b>, to find. This post retraces the hunt (false leads and all), including how the agent sessions were set up — because the setup turned out to matter more than the agent — then reproduces the whole thing from scratch on synthetic data and walks through three fixes. If you know roughly what BatchNorm and a training loop are, you have enough to follow along.</p>
 
   <div class="mb-6 p-4 rounded border bg-blue-50 text-blue-900">
     <b>TL;DR.</b> BatchNorm keeps a hidden <code>running_var</code> buffer that it uses at eval time. It updates by a running average of per-batch variance — <i>not</i> by gradient descent — so the loss is blind to it. A few giant-scale outliers (think a building modeled in millimeters) blow up the variance of the first conv layer; whichever checkpoint you save right after such a batch divides every clean input by a hugely inflated number and collapses. Swapping BatchNorm for <b>GroupNorm</b> removes the buffer and the instability — but it also erases the model's sense of absolute scale, so I had to add that back explicitly with a small <b>FiLM</b> conditioning path.
@@ -49,12 +49,12 @@ export const frontmatter = {
 
   <section id="background" class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Background: the task, the data, the encoder</h2>
-    <p class="text-gray-700 mb-3">A minute of context — kept generic, because the specifics of the system don't matter to the bug. The setting is <b>3D shape retrieval</b>: a point-cloud encoder is trained contrastively, CLIP-style, so each shape's embedding lands next to a text embedding of its description. At evaluation you query by text and retrieve shapes; the score is a retrieval metric (MRR) — the number that was see-sawing.</p>
-    <p class="text-gray-700 mb-3">Two things about the <i>inputs</i> drive this story. First, <b>physical scale is a real, wanted signal</b> — a 3&nbsp;mm and a 4&nbsp;mm version of a part are different things — so the clouds are normalized by a <i>single shared constant</i> rather than each rescaled into its own unit box; absolute size survives normalization by design. Second, the inputs <b>span a huge range of scale</b>, from tiny parts to building-sized models, with the occasional bad unit conversion on top. A single shared divisor has no per-sample clamp, so those giant inputs stay giant after "normalization." Hold that thought.</p>
-    <p class="text-gray-700 mb-3">The encoder is an ordinary patch-based point network: group the cloud into local patches, run each through a couple of small conv blocks, and pool down to one L2-normalized embedding. The only detail that matters later is that the conv blocks normalize with <b>BatchNorm</b> — the standard, unremarkable choice. Keep an eye on it.</p>
+    <p class="text-gray-700 mb-3">A minute of context — kept generic, because the specifics of the system don't matter to the bug. The setting is <b>3D shape retrieval</b>: a 3D encoder is trained contrastively, CLIP-style, so each shape's embedding lands next to a text embedding of its description. At evaluation you query by text and retrieve shapes; the score is a retrieval metric (MRR) — the number that was see-sawing.</p>
+    <p class="text-gray-700 mb-3">Two things about the <i>inputs</i> drive this story. First, <b>physical scale is a real, wanted signal</b> — a 3&nbsp;mm and a 4&nbsp;mm version of a part are different things — so the 3D shapes are normalized by a <i>single shared constant</i> rather than each rescaled into its own unit box; absolute size survives normalization by design. Second, the inputs <b>span a huge range of scale</b>, from tiny parts to building-sized models, with the occasional bad unit conversion on top. A single shared divisor has no per-sample clamp, so those giant inputs stay giant after "normalization." Hold that thought.</p>
+    <p class="text-gray-700 mb-3">The encoder is an ordinary patch-based point network: group the shape into local patches, run each through a couple of small conv blocks, and pool down to one L2-normalized embedding. The only detail that matters later is that the conv blocks normalize with <b>BatchNorm</b> — the standard, unremarkable choice. Keep an eye on it.</p>
     <figure class="bg-white rounded border p-2 mb-2">
       <div class="overflow-x-auto">
-        <svg viewBox="0 0 1005 150" class="min-w-[660px] w-full" role="img" aria-label="Architecture strip of the point encoder: point cloud, global divisor, patch grouping with constant color, first conv block with BatchNorm, second conv block, pooling head, L2-normalized embedding" font-family="ui-sans-serif, system-ui, sans-serif">
+        <svg viewBox="0 0 1005 150" class="min-w-[660px] w-full" role="img" aria-label="Architecture strip of the 3D encoder: input shape, global divisor, patch grouping with a constant channel, first conv block with BatchNorm, second conv block, pooling head, L2-normalized embedding" font-family="ui-sans-serif, system-ui, sans-serif">
           <defs>
             <marker id="arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
@@ -62,8 +62,8 @@ export const frontmatter = {
           </defs>
 
           <rect x="8" y="40" width="100" height="64" rx="8" fill="#f8fafc" stroke="#64748b"/>
-          <text x="58" y="68" text-anchor="middle" font-size="12" fill="#334155" font-weight="600">point cloud</text>
-          <text x="58" y="85" text-anchor="middle" font-size="11" fill="#64748b">N × 3</text>
+          <text x="58" y="68" text-anchor="middle" font-size="12" fill="#334155" font-weight="600">3D shape</text>
+          <text x="58" y="85" text-anchor="middle" font-size="11" fill="#64748b">coordinates</text>
           <line x1="108" y1="72" x2="128" y2="72" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrB)"/>
 
           <rect x="132" y="40" width="110" height="64" rx="8" fill="#f8fafc" stroke="#64748b"/>
@@ -73,23 +73,20 @@ export const frontmatter = {
 
           <rect x="266" y="40" width="150" height="64" rx="8" fill="#f8fafc" stroke="#64748b"/>
           <text x="341" y="62" text-anchor="middle" font-size="12" fill="#334155" font-weight="600">group into patches</text>
-          <text x="341" y="78" text-anchor="middle" font-size="11" fill="#64748b">FPS + kNN, recenter</text>
-          <text x="341" y="93" text-anchor="middle" font-size="11" fill="#64748b">+ const color → 6 ch</text>
+          <text x="341" y="78" text-anchor="middle" font-size="11" fill="#64748b">local neighborhoods,</text>
+          <text x="341" y="93" text-anchor="middle" font-size="11" fill="#64748b">recentered + const channel</text>
           <line x1="416" y1="72" x2="436" y2="72" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrB)"/>
 
           <rect x="440" y="32" width="280" height="80" rx="8" fill="#ffffff" stroke="#334155" stroke-width="1.5"/>
-          <text x="580" y="48" text-anchor="middle" font-size="11" fill="#334155" font-weight="700">first_conv</text>
+          <text x="580" y="48" text-anchor="middle" font-size="11" fill="#334155" font-weight="700">first conv block</text>
           <rect x="448" y="56" width="60" height="44" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
-          <text x="478" y="75" text-anchor="middle" font-size="10" fill="#475569">Conv1d</text>
-          <text x="478" y="88" text-anchor="middle" font-size="10" fill="#475569">6→128</text>
+          <text x="478" y="80" text-anchor="middle" font-size="10" fill="#475569">conv</text>
           <rect x="516" y="56" width="60" height="44" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
-          <text x="546" y="75" text-anchor="middle" font-size="10" fill="#475569">BatchNorm</text>
-          <text x="546" y="88" text-anchor="middle" font-size="10" fill="#475569">128</text>
+          <text x="546" y="80" text-anchor="middle" font-size="10" fill="#475569">BatchNorm</text>
           <rect x="584" y="56" width="60" height="44" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
           <text x="614" y="80" text-anchor="middle" font-size="10" fill="#475569">ReLU</text>
           <rect x="652" y="56" width="60" height="44" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
-          <text x="682" y="75" text-anchor="middle" font-size="10" fill="#475569">Conv1d</text>
-          <text x="682" y="88" text-anchor="middle" font-size="10" fill="#475569">→256</text>
+          <text x="682" y="80" text-anchor="middle" font-size="10" fill="#475569">conv</text>
           <line x1="720" y1="72" x2="740" y2="72" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrB)"/>
 
           <rect x="744" y="40" width="110" height="64" rx="8" fill="#f8fafc" stroke="#64748b"/>
@@ -103,7 +100,7 @@ export const frontmatter = {
           <text x="937" y="93" text-anchor="middle" font-size="11" fill="#64748b">→ L2-norm</text>
         </svg>
       </div>
-      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 2 — The point-cloud encoder, plain and unremarkable. Trained contrastively against text embeddings of the shape descriptions.</figcaption>
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 2 — The 3D encoder, plain and unremarkable. Trained contrastively against text embeddings of the shape descriptions.</figcaption>
     </figure>
   </section>
 
@@ -139,7 +136,7 @@ export const frontmatter = {
     <p class="text-gray-700 mb-3">Now the plain strip from the background pays off. Same encoder, second look — this time with the suspect marked. The exploding tensor lives in the <b>very first normalization layer</b>: the first place where raw coordinate magnitudes meet a statistic shared across samples.</p>
     <figure class="bg-white rounded border p-2 mb-2">
       <div class="overflow-x-auto">
-        <svg viewBox="0 0 1005 240" class="min-w-[660px] w-full" role="img" aria-label="Architecture strip of the point encoder: point cloud, global divisor, patch grouping with constant color, first conv block whose BatchNorm holds the poisoned running_var, second conv block, pooling head, L2-normalized embedding" font-family="ui-sans-serif, system-ui, sans-serif">
+        <svg viewBox="0 0 1005 240" class="min-w-[660px] w-full" role="img" aria-label="Architecture strip of the 3D encoder: input shape, global divisor, patch grouping with a constant channel, first conv block whose BatchNorm holds the poisoned running_var, second conv block, pooling head, L2-normalized embedding" font-family="ui-sans-serif, system-ui, sans-serif">
           <defs>
             <marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
@@ -149,8 +146,8 @@ export const frontmatter = {
           <text x="187" y="52" text-anchor="middle" font-size="11" fill="#b91c1c" font-style="italic">no per-sample clamp — outliers sail through</text>
 
           <rect x="8" y="70" width="100" height="64" rx="8" fill="#f8fafc" stroke="#64748b"/>
-          <text x="58" y="98" text-anchor="middle" font-size="12" fill="#334155" font-weight="600">point cloud</text>
-          <text x="58" y="115" text-anchor="middle" font-size="11" fill="#64748b">N × 3</text>
+          <text x="58" y="98" text-anchor="middle" font-size="12" fill="#334155" font-weight="600">3D shape</text>
+          <text x="58" y="115" text-anchor="middle" font-size="11" fill="#64748b">coordinates</text>
           <line x1="108" y1="102" x2="128" y2="102" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr3)"/>
 
           <rect x="132" y="70" width="110" height="64" rx="8" fill="#fff7ed" stroke="#b45309"/>
@@ -160,23 +157,21 @@ export const frontmatter = {
 
           <rect x="266" y="70" width="150" height="64" rx="8" fill="#f8fafc" stroke="#64748b"/>
           <text x="341" y="92" text-anchor="middle" font-size="12" fill="#334155" font-weight="600">group into patches</text>
-          <text x="341" y="108" text-anchor="middle" font-size="11" fill="#64748b">FPS + kNN, recenter</text>
-          <text x="341" y="123" text-anchor="middle" font-size="11" fill="#64748b">+ const color → 6 ch</text>
+          <text x="341" y="108" text-anchor="middle" font-size="11" fill="#64748b">local neighborhoods,</text>
+          <text x="341" y="123" text-anchor="middle" font-size="11" fill="#64748b">recentered + const channel</text>
           <line x1="416" y1="102" x2="436" y2="102" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr3)"/>
 
           <rect x="440" y="62" width="280" height="80" rx="8" fill="#ffffff" stroke="#334155" stroke-width="1.5"/>
-          <text x="580" y="78" text-anchor="middle" font-size="11" fill="#334155" font-weight="700">first_conv</text>
+          <text x="580" y="78" text-anchor="middle" font-size="11" fill="#334155" font-weight="700">first conv block</text>
           <rect x="448" y="86" width="60" height="44" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
-          <text x="478" y="105" text-anchor="middle" font-size="10" fill="#475569">Conv1d</text>
-          <text x="478" y="118" text-anchor="middle" font-size="10" fill="#475569">6→128</text>
+          <text x="478" y="112" text-anchor="middle" font-size="10" fill="#475569">conv</text>
           <rect x="516" y="86" width="60" height="44" rx="5" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
           <text x="546" y="105" text-anchor="middle" font-size="10" fill="#b91c1c" font-weight="700">BatchNorm</text>
           <text x="546" y="118" text-anchor="middle" font-size="10" fill="#b91c1c">running_var</text>
           <rect x="584" y="86" width="60" height="44" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
-          <text x="614" y="110" text-anchor="middle" font-size="10" fill="#475569">ReLU</text>
+          <text x="614" y="112" text-anchor="middle" font-size="10" fill="#475569">ReLU</text>
           <rect x="652" y="86" width="60" height="44" rx="5" fill="#f1f5f9" stroke="#94a3b8"/>
-          <text x="682" y="105" text-anchor="middle" font-size="10" fill="#475569">Conv1d</text>
-          <text x="682" y="118" text-anchor="middle" font-size="10" fill="#475569">→256</text>
+          <text x="682" y="112" text-anchor="middle" font-size="10" fill="#475569">conv</text>
           <line x1="720" y1="102" x2="740" y2="102" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr3)"/>
 
           <rect x="744" y="70" width="110" height="64" rx="8" fill="#f8fafc" stroke="#64748b"/>
@@ -214,7 +209,7 @@ export const frontmatter = {
 
   <section id="why-outliers" class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Why a few outliers poison it</h2>
-    <p class="text-gray-700 mb-3">My point clouds are normalized by a <b>single dataset-wide divisor</b> rather than per-sample. That's deliberate: I want a 3&nbsp;mm part and a 4&nbsp;mm part to stay <i>different</i> after normalization, because absolute size is a real, discriminative feature. The cost is that there's <b>no per-sample clamp</b>: an object that is genuinely enormous (a building uploaded in millimeters, or a unit-error model) keeps enormous coordinates after "normalization".</p>
+    <p class="text-gray-700 mb-3">My 3D inputs are normalized by a <b>single dataset-wide divisor</b> rather than per-sample. That's deliberate: I want a 3&nbsp;mm part and a 4&nbsp;mm part to stay <i>different</i> after normalization, because absolute size is a real, discriminative feature. The cost is that there's <b>no per-sample clamp</b>: an object that is genuinely enormous (a building drawn in millimeters, or a unit-error model) keeps enormous coordinates after "normalization".</p>
     <p class="text-gray-700 mb-3">The first convolution turns large coordinates into large activations, and variance grows with the <i>square</i> of the spread. The left panel below shows the distribution of per-sample extent (how far the coordinates reach after normalization) on a <b>log₁₀</b> axis: a healthy bulk at log₁₀ ≈ 0 (extent ≈ 1), with a detached tail of outliers out near log₁₀ ≈ 3–4 — that is, extent in the <b>thousands to ten-thousands</b>. The right panel plots the resulting first-layer variance against the raw extent (both axes log-scaled) — a clean <code>variance ∝ extent²</code> line, with the tail samples sitting at variances five to eight orders of magnitude above the bulk.</p>
     <figure class="bg-white rounded border p-2 mb-2">
       <img src="/plots/batchnorm-poisoning/data_diagnostic.png" alt="Left: histogram of per-sample extent with a long outlier tail. Right: first-conv variance grows as extent squared." class="w-full rounded" />
@@ -420,14 +415,14 @@ export const frontmatter = {
     <p class="text-gray-700 mb-3"><b>What it does.</b> Replace the shared divisor with per-sample <b>unit-box</b> normalization (blue): rescale every object so its bounding box is the same cube, <i>before</i> the network sees it.</p>
     <p class="text-gray-700 mb-3"><b>Why it's a fix.</b> This goes after the root cause instead of the symptom. Once every sample is rescaled into the same box, there are no giant coordinates left <i>for anyone</i> — the outlier's extent is clamped to the same range as every clean part, so first-conv activations are bounded across the board. The explosion doesn't just fail to leak into a buffer; it never happens. Even with plain BatchNorm there'd be nothing to poison, and the grad-norm spikes go away too. It's the most robust rung against the mechanism, and it's the clean, scale-free geometry base we need for the next step.</p>
     <div class="p-4 rounded border bg-rose-50 text-rose-900 mb-3">
-      <b>Still not perfect: it throws away a feature we need.</b> Unit-box makes a 3&nbsp;mm and a 4&nbsp;mm version of the same shape into <i>byte-identical inputs</i> — the encoder becomes truly scale-blind (size-margin <b>0.00</b>), and retrieval that leans on size collapses (MRR 0.34&nbsp;→&nbsp;0.10, because the teacher rewards a size the model can no longer see). For CAD, where an M3 and an M4 bolt are different parts, that's not acceptable. We fixed stability by amputating absolute scale.
+      <b>Still not perfect: it throws away a feature we need.</b> Unit-box makes a 3&nbsp;mm and a 4&nbsp;mm version of the same shape into <i>byte-identical inputs</i> — the encoder becomes truly scale-blind (size-margin <b>0.00</b>), and retrieval that leans on size collapses (MRR 0.34&nbsp;→&nbsp;0.10, because the teacher rewards a size the model can no longer see). When a 3&nbsp;mm and a 4&nbsp;mm version are genuinely different things, that's not acceptable. We fixed stability by amputating absolute scale.
     </div>
 
     <h3 id="fix-3" class="text-2xl font-bold mt-8 mb-2">Fix&nbsp;3 — Unit-box + FiLM: put scale back deliberately</h3>
     <p class="text-gray-700 mb-3"><b>What it does.</b> Keep unit-box + GroupNorm for the geometry (stable, scale-free), then re-inject absolute scale as an <b>explicit, dedicated signal</b> instead of letting it ride on raw activation magnitudes. Take the object's size, compress it with a log, expand it into <a href="https://arxiv.org/abs/2006.10739" target="_blank" rel="noopener" class="text-blue-700 hover:underline">Fourier features</a> (so the network can resolve both tiny ratios like 3:4 and huge ones), pass it through a tiny MLP, and use the result to modulate the features — a <a href="https://arxiv.org/abs/1709.07871" target="_blank" rel="noopener" class="text-blue-700 hover:underline"><b>FiLM</b></a> layer (<code>output = (1+γ)·features + β</code>, with <code>γ, β</code> predicted from the size). It's the same trick <a href="https://arxiv.org/abs/2212.09748" target="_blank" rel="noopener" class="text-blue-700 hover:underline">diffusion models use to inject the timestep</a>.</p>
     <figure class="bg-white rounded border p-2 mb-3">
       <div class="overflow-x-auto">
-        <svg viewBox="0 0 1005 340" class="min-w-[660px] w-full" role="img" aria-label="Diagram: the point cloud splits into a scale-invariant shape path (unit-box then encoder) and an explicit scale path (log size, Fourier features, MLP), merged by a FiLM layer into a stable, size-aware embedding" font-family="ui-sans-serif, system-ui, sans-serif">
+        <svg viewBox="0 0 1005 340" class="min-w-[660px] w-full" role="img" aria-label="Diagram: the 3D input splits into a scale-invariant shape path (unit-box then encoder) and an explicit scale path (log size, Fourier features, MLP), merged by a FiLM layer into a stable, size-aware embedding" font-family="ui-sans-serif, system-ui, sans-serif">
           <defs>
             <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
@@ -436,8 +431,8 @@ export const frontmatter = {
 
           <!-- input -->
           <rect x="24" y="136" width="140" height="64" rx="8" fill="#f8fafc" stroke="#64748b"/>
-          <text x="94" y="163" text-anchor="middle" font-size="13" fill="#334155" font-weight="600">point cloud</text>
-          <text x="94" y="182" text-anchor="middle" font-size="12" fill="#64748b">M3 bolt (3 mm)</text>
+          <text x="94" y="163" text-anchor="middle" font-size="13" fill="#334155" font-weight="600">3D shape</text>
+          <text x="94" y="182" text-anchor="middle" font-size="12" fill="#64748b">a 3 mm part</text>
 
           <!-- shape path -->
           <text x="230" y="40" font-size="13" fill="#1d4ed8" font-weight="700">shape path — scale-invariant, outlier-proof</text>
@@ -492,7 +487,7 @@ export const frontmatter = {
       <li>A single-divisor normalization with no per-sample clamp lets scale outliers through, and variance grows as extent² — so the tail does the damage.</li>
       <li>GroupNorm removes the instability for free, but it (and every per-sample norm) is scale-invariant — if absolute scale matters to you, you have to inject it back deliberately.</li>
       <li>FiLM conditioning on a log-scale Fourier embedding is a clean way to do that: shape stays scale-invariant and stable; scale becomes its own bounded, explicit signal.</li>
-      <li>None of these fixes clean the <i>data</i>. Genuine unit-error uploads (a house modeled in kilometers) still belong filtered upstream — separate from <i>legitimately</i> huge parts, which unit-box and FiLM handle fine. "Fix the norm layer" and "fix the dataset" are different jobs.</li>
+      <li>None of these fixes clean the <i>data</i>. Genuine unit-error models (a house drawn in kilometers) still belong filtered upstream — separate from <i>legitimately</i> huge parts, which unit-box and FiLM handle fine. "Fix the norm layer" and "fix the dataset" are different jobs.</li>
       <li>The agent workflow that cracked it: one fresh session per angle; have each session write its findings into technical files (a no-analysis quick-reference + a conclusions file); then hand those to a <i>new</i> session framed with distrust — "I don't trust the conclusions; verify every step; come back with proofs" — plus raw artifacts (the tracker run, the checkpoint directory, the logs), not summaries. Inherited conclusions carry inherited blind spots; re-derived ones become actionable.</li>
       <li>Agents love declaring a smoking gun and building on it unverified. The countermeasure is procedural, not hopeful: require a numeric check before every next step, and require the final answer as re-runnable proof — "come back with proofs, not gut feelings."</li>
     </ul>
