@@ -324,13 +324,23 @@ export const frontmatter = {
       Two details in that derivation are worth pulling out, because they are where KDA earns its speed.
     </p>
     <p class="text-gray-700 mb-3">
-      <b>Binding a = b = k.</b> KDA's transition matrix
-      <span class="font-mono text-sm">Diag(α) − βk(α⊙k)ᵀ</span> is a special case of the general
-      "diagonal plus low rank" form <span class="font-mono text-sm">D − abᵀ</span>. The general version
-      carries two independent vectors; KDA's are both <span class="font-mono text-sm">k</span>, because
-      that is what makes it a <em>delta</em> rule rather than an arbitrary rank-1 update. That tie cuts
-      the second-level chunk matmuls from four to two and removes three more — worth close to 2× in
-      kernel throughput, for free, from a constraint that was already there for other reasons.
+      <b>Binding both low-rank vectors to k.</b> Multiply out Eq. 1 and KDA's transition matrix is
+    </p>
+    <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-sm text-gray-900 overflow-x-auto">
+      (I − β<sub>t</sub> k<sub>t</sub> k<sub>t</sub>ᵀ) Diag(α<sub>t</sub>) &nbsp;=&nbsp; Diag(α<sub>t</sub>) − (β<sub>t</sub> k<sub>t</sub>)(α<sub>t</sub> ⊙ k<sub>t</sub>)ᵀ
+    </div>
+    <p class="text-gray-700 mb-3">
+      which is an instance of the general <em>diagonal-plus-low-rank</em> form
+      <span class="font-mono text-sm">D − a bᵀ</span>. The general version carries two
+      <em>independent</em> vectors <span class="font-mono text-sm">a</span> and
+      <span class="font-mono text-sm">b</span>; in KDA both are the same key up to scaling —
+      <span class="font-mono text-sm">a = β<sub>t</sub>k<sub>t</sub></span>,
+      <span class="font-mono text-sm">b = α<sub>t</sub> ⊙ k<sub>t</sub></span> — because that is exactly
+      what makes it a <em>delta</em> rule rather than an arbitrary rank-1 update. That tie cuts the
+      second-level chunk matmuls from four to two and removes three more: close to 2× kernel
+      throughput, obtained for free from a constraint that was already there for other reasons.
+      (I have this reduction as a test rather than a claim — writing it caught two mistakes in my
+      own DPLR reference before it caught anything about the kernels.)
     </p>
     <p class="text-gray-700 mb-3">
       <b>Never form 1/Γ.</b> The chunkwise algebra contains a division by the cumulative decay. Over 64
