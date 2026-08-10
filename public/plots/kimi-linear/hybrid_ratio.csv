@@ -1,0 +1,4 @@
+config,kda_per_attention,val_ppl
+attn_only,0,51.0170
+3to1,3,53.8164
+kda_only,,57.8052

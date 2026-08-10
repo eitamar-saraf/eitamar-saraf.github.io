@@ -379,11 +379,126 @@ export const frontmatter = {
   <!-- ============================================================ 10 -->
   <section id="results" class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">10. Does it hold up?</h2>
-    <div class="p-4 rounded border bg-amber-50 text-amber-900">
-      <b>Experiments in progress.</b> This section will carry my own runs on two RTX 3090s: the
-      synthetic recall/copy/state-tracking tasks across all six architectures, the kernel benchmarks,
-      and a small language-model pretraining sweep over the hybrid ratio. Results — including
-      whatever fails to reproduce at this scale — go here.
+    <p class="text-gray-700 mb-3">
+      I trained the whole family on two RTX 3090s: all six architectures plus a softmax baseline on
+      three synthetic tasks, the kernel benchmarks, and a small language-model sweep over the hybrid
+      ratio. Some of it reproduces cleanly. Some of it does not, and the part that does not is more
+      interesting than the part that does.
+    </p>
+
+    <h3 class="text-xl md:text-2xl font-semibold mt-8 mb-2">The efficiency claims reproduce, exactly</h3>
+    <p class="text-gray-700 mb-3">
+      This is the cleanest result of the lot. Timing KDA's chunk kernel against the <em>general</em>
+      DPLR kernel computing the same recurrence gives <b>1.8× at every sequence length from 2K to
+      64K</b> — flat, which is what you want from a claim that is structural rather than incidental.
+      The paper says "nearly 2×". It is nearly 2×.
+    </p>
+    <figure class="bg-white rounded border p-2 mb-2">
+      <img src="/plots/kimi-linear/kernel_bench.png" alt="Left: log-log kernel time vs sequence length, with flash attention crossing above KDA around 4096 tokens. Right: the DPLR-to-KDA speedup ratio, flat at about 1.8x across all lengths." class="w-full rounded" />
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. — One head configuration (16 heads, d=128), bf16, RTX 3090. The speedup is verified to be a speedup: the benchmark refuses to report a ratio unless the two kernels first agree numerically.</figcaption>
+    </figure>
+    <p class="text-gray-700 mb-3">
+      The left panel also shows the crossover I flagged in §2 as a real thing rather than a caveat.
+      At 2048 tokens flash attention is <em>faster</em> than KDA (0.36 ms vs 0.46 ms). By 8K they have
+      swapped; by 64K attention is <b>24.6× slower</b> (336 ms vs 13.7 ms). Linear attention is a bet
+      on long context, and below about 4K tokens on this hardware it is a losing one.
+    </p>
+    <p class="text-gray-700 mb-3">
+      At the whole-model level the memory claim lands too. An 8-layer model at 16K context:
+    </p>
+    <div class="overflow-x-auto my-4">
+      <table class="w-full text-sm border-collapse">
+        <thead><tr class="border-b-2 border-gray-300 text-left">
+          <th class="py-2 pr-4 font-semibold">Configuration</th>
+          <th class="py-2 pr-4 font-semibold">Prefill, 16K tokens</th>
+          <th class="py-2 pr-4 font-semibold">Must be cached</th>
+          <th class="py-2 font-semibold">64K context</th>
+        </tr></thead>
+        <tbody>
+          <tr class="border-b border-gray-200"><td class="py-2 pr-4">Full attention</td><td class="pr-4 font-mono">2132 ms</td><td class="pr-4 font-mono">512 MB</td><td class="font-mono text-gray-500">out of memory</td></tr>
+          <tr class="border-b border-gray-200 bg-blue-50"><td class="py-2 pr-4">3:1 hybrid</td><td class="pr-4 font-mono">703 ms</td><td class="pr-4 font-mono">129.5 MB</td><td class="font-mono text-gray-500">out of memory</td></tr>
+          <tr><td class="py-2 pr-4">Pure KDA</td><td class="pr-4 font-mono">219 ms</td><td class="pr-4 font-mono">2 MB</td><td class="font-mono">912 ms</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-gray-700 mb-3">
+      129.5 MB against 512 MB is a <b>74.7% reduction</b> — the paper's 75%, arrived at from the
+      layer counts. And the qualitative difference at 64K is starker than any percentage: on a 24 GB
+      card the full-attention and hybrid models simply stop running, while pure KDA keeps going on a
+      state that never grows past 2 MB.
+    </p>
+
+    <h3 class="text-xl md:text-2xl font-semibold mt-8 mb-2">The recall claim reproduces — halfway</h3>
+    <p class="text-gray-700 mb-3">
+      MQAR turned out to be a much sharper instrument than I expected, and not in a good way. At
+      T = 1024 the outcome is <b>strictly bimodal</b>: a run either solves the task (~1.00) or sits at
+      chance (~0.04), with almost nothing in between. A three-seed mean is therefore not measuring
+      capability, it is counting coin flips. So I ran eight seeds and reported how often each model
+      solves the task at all.
+    </p>
+    <figure class="bg-white rounded border p-2 mb-2">
+      <img src="/plots/kimi-linear/solve_rate_mqar.png" alt="Left: bar chart of seeds solved out of 8 — DeltaNet 8, KDA 5, Gated DeltaNet 3, Mamba2 1, softmax attention 8. Right: every individual seed's accuracy, clustered at either 1.0 or near zero." class="w-full rounded" />
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. — MQAR at T=1024, 8 seeds, 2 layers, 2 heads. The right panel is the reason the left one exists: there is no meaningful middle to average.</figcaption>
+    </figure>
+    <p class="text-gray-700 mb-3">
+      Read down the gating hierarchy and the paper's ordering is right there:
+      <b>KDA (channel gate) 5/8 &gt; Gated DeltaNet (scalar gate) 3/8 &gt; Mamba2 (no delta rule) 1/8</b>.
+      Finer-grained gating really is more reliable than a scalar gate, and the delta rule really does
+      matter more than the gate. That is the paper's contribution, and it holds.
+    </p>
+    <p class="text-gray-700 mb-3">
+      And then there is the result I did not expect: <b>DeltaNet — no gate at all — solves it 8/8</b>,
+      matching full attention and beating every gated model. Palindrome says the same thing more
+      gently (DeltaNet 0.954 at T=2048, ahead of Gated DeltaNet's 0.851 and KDA's 0.789), and the
+      stack task is saturated for everything (≥0.99) so it discriminates nothing at these lengths.
+    </p>
+    <figure class="bg-white rounded border p-2 mb-2">
+      <img src="/plots/kimi-linear/accuracy_vs_length.png" alt="Three panels — mqar, palindrome, stack — showing accuracy against sequence length for KDA, Gated DeltaNet, Mamba2 and a softmax reference, with individual seeds as dots" class="w-full rounded" />
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. — Dots are individual seeds, lines are means. On MQAR the dots sit at the top and bottom of the axis and the mean line passes through territory no run ever occupied — which is exactly why the solve-rate figure above is the honest one.</figcaption>
+    </figure>
+    <p class="text-gray-700 mb-3">
+      Why would forgetting <em>hurt</em>? Because none of these tasks ask you to forget anything. Every
+      key-value pair in MQAR is queried; every symbol in a palindrome is needed. A forget gate can only
+      lose information a model is about to be graded on, so the best gate is one that stays open — and
+      an ungated model gets that for free while a gated one has to learn its way there. On that reading,
+      KDA beating Gated DeltaNet is precisely the expected result: with 128 independent dials per head
+      it can hold some channels open while a single scalar dial has to compromise across all of them.
+      The paper's own synthetic figure does not include DeltaNet, so this comparison is not one it makes.
+    </p>
+
+    <h3 class="text-xl md:text-2xl font-semibold mt-8 mb-2">The headline does not reproduce at this scale</h3>
+    <p class="text-gray-700 mb-3">
+      Kimi Linear's central claim is that a 3:1 hybrid <em>beats</em> full attention. At 34M
+      non-embedding parameters and 393M tokens of FineWeb-Edu, it does not:
+    </p>
+    <figure class="bg-white rounded border p-2 mb-2">
+      <img src="/plots/kimi-linear/hybrid_ratio.png" alt="Bar chart of validation perplexity by configuration: all-attention lowest at 51.0, 3:1 hybrid 53.8, pure KDA 57.8" class="w-full rounded" />
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. — 8 layers, d=512, context 2048, matched token budget, one seed each. Lower is better.</figcaption>
+    </figure>
+    <p class="text-gray-700 mb-3">
+      Full attention wins at <b>51.0</b> perplexity, the 3:1 hybrid is second at <b>53.8</b>, and pure
+      KDA is last at <b>57.8</b>. The ordering is monotone in how much global attention the stack has.
+    </p>
+    <p class="text-gray-700 mb-3">
+      I want to be careful about what this does and does not say. It is a <b>three-orders-of-magnitude
+      extrapolation gap</b>: the paper's result is 48B parameters and 1.4T tokens, and mine is 34M and
+      0.4B. A quadratic mechanism that reads every token verbatim should be expected to win when there
+      are few enough tokens for that to be cheap and few enough parameters that compression buys
+      nothing. What my numbers can support is the weaker, still-useful claim that <b>adding a few global
+      attention layers to a linear stack recovers most of the gap</b> — the hybrid closes about 60% of
+      the distance between pure KDA and full attention while keeping a quarter of the cache. What they
+      cannot support is the headline, and I do not think a run at this scale could.
+    </p>
+
+    <div class="my-6 p-4 rounded border bg-gray-50 text-gray-700 text-sm">
+      <b class="block mb-2">Scorecard</b>
+      <ul class="space-y-1.5 list-none">
+        <li><span class="text-green-700 font-semibold">Reproduced.</span> The ~2× kernel speedup from constraining DPLR (measured 1.8×, flat across lengths). The 75% KV-cache reduction (measured 74.7%). Linear-vs-quadratic scaling, including the crossover below ~4K tokens where attention is genuinely faster.</li>
+        <li><span class="text-green-700 font-semibold">Reproduced.</span> The gating hierarchy on associative recall: channel gate &gt; scalar gate &gt; no delta rule (5/8, 3/8, 1/8 seeds).</li>
+        <li><span class="text-amber-700 font-semibold">Did not reproduce.</span> The hybrid beating full attention. Expected at 34M parameters; reported anyway.</li>
+        <li><span class="text-amber-700 font-semibold">Unexpected.</span> Ungated DeltaNet beats every gated variant on all three synthetic tasks. Consistent with the tasks never requiring anything to be forgotten.</li>
+        <li><span class="text-gray-600 font-semibold">Not tested.</span> Everything the paper is actually about: 1M-token context, RL post-training, the 48B checkpoint. Two 3090s do not reach any of it.</li>
+      </ul>
     </div>
   </section>
 
