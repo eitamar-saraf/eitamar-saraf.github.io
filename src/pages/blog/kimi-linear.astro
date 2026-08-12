@@ -56,133 +56,103 @@ export const frontmatter = {
   <!-- ============================================================ 1 -->
   <section id="bill" class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">1. The bill comes due</h2>
+
+    <p class="text-sm text-gray-500 mb-4">
+      Dotted terms open a short aside. Everything in them is detail you can skip — the main line reads straight through.
+    </p>
+
     <p class="text-gray-700 mb-3">
       Softmax attention has a property that is easy to admire and expensive to keep: <b>it never
       compresses anything</b>. To produce token <span class="font-mono text-sm">t+1</span> it needs the
       key and value vectors of every earlier token, in full, unmodified. That is exactly why it is so
-      good at precise recall — nothing has been thrown away — and it is also the entire problem.
+      good at precise recall — nothing was thrown away — and it is also the entire problem, because
+      those vectors have to be
+      <span class="kn"><button type="button" class="kn-t">read</button><span class="kn-b"
+        ><span class="kn-p"><b>Read from where, exactly?</b></span
+        ><span class="kn-p">The cached keys and values sit in the GPU's <b>HBM</b> — the multi-gigabyte
+        pool <span class="m">nvidia-smi</span> reports. The arithmetic happens somewhere far smaller and
+        faster: the on-chip SRAM and registers of each streaming multiprocessor, tens of megabytes at
+        most.</span
+        ><span class="kn-p">So "read" means <b>copied out of HBM, across the memory bus, into on-chip
+        memory</b> — once per layer, and again for every token you generate, because there is nowhere
+        on-chip to keep a multi-gigabyte cache between steps.</span
+        ><span class="kn-p">Why it matters: on an H100 the arithmetic units can perform roughly <b>500
+        floating-point operations in the time it takes to fetch one number from HBM</b>. Whichever of the
+        two you need more of sets your speed.</span
+      ></span></span>
+      back for every single token generated.
     </p>
 
-    <h3 class="text-xl md:text-2xl font-semibold mt-8 mb-2">Read from where, exactly</h3>
     <p class="text-gray-700 mb-3">
-      Those cached keys and values sit in the GPU's <b>HBM</b> — the several-gigabyte pool that
-      <span class="font-mono text-sm">nvidia-smi</span> reports. The arithmetic happens somewhere much
-      smaller and much faster: the on-chip SRAM and registers of each streaming multiprocessor, tens of
-      megabytes at most. So "read" means <b>copied out of HBM, across the memory bus, into on-chip
-      memory</b> — and it has to happen again for every layer, and again for every token you generate,
-      because there is nowhere on-chip to keep a multi-gigabyte cache between steps.
-    </p>
-    <p class="text-gray-700 mb-3">
-      That distinction is the one that matters, because on an H100 the arithmetic units can do roughly
-      <b>500 floating-point operations in the time it takes to fetch one number from HBM</b>. Whichever
-      of the two you need more of is the one that sets your speed.
-    </p>
-
-    <h3 class="text-xl md:text-2xl font-semibold mt-8 mb-2">Where T² and T come from</h3>
-    <p class="text-gray-700 mb-3">
-      Attention is charged for twice, in two different currencies.
-    </p>
-    <p class="text-gray-700 mb-3">
-      <b>Prefill</b> — digesting the prompt. You have <span class="font-mono text-sm">T</span> queries,
-      and each attends to up to <span class="font-mono text-sm">T</span> keys, each comparison a
-      <span class="font-mono text-sm">d</span>-dimensional dot product. That is
-      <span class="font-mono text-sm">T × T × d</span> multiply-adds, hence
-      <span class="font-mono text-sm">O(T²d)</span> — <b>quadratic, and it is compute</b>. Every query is
-      independent, so it parallelises beautifully; you are simply buying a lot of arithmetic. Double the
-      prompt, quadruple the work.
-    </p>
-    <p class="text-gray-700 mb-3">
-      <b>Decoding</b> — emitting one token. Now there is exactly <em>one</em> query. It attends to
-      <span class="font-mono text-sm">T</span> keys, so the arithmetic is only
-      <span class="font-mono text-sm">O(Td)</span> — trivial. But to do it you must fetch all
-      <span class="font-mono text-sm">T</span> keys and all <span class="font-mono text-sm">T</span>
-      values out of HBM: <span class="font-mono text-sm">2Td</span> numbers moved to perform about
-      <span class="font-mono text-sm">2Td</span> operations. <b>Roughly one operation per number
-      fetched</b> — against hardware that wants five hundred. The units sit idle waiting for memory, so
-      decoding is <b>bandwidth-bound, and it is linear in T per token</b>.
-    </p>
-    <div class="my-4 p-4 rounded border bg-gray-50 text-sm text-gray-700">
-      <b>The upshot:</b> prefill is <span class="font-mono">O(T²)</span> arithmetic paid <em>once</em>.
-      Decoding is <span class="font-mono">O(T)</span> memory traffic paid <em>per token</em> — so
-      generating <span class="font-mono">N</span> tokens drags <span class="font-mono">O(N·T)</span>
-      bytes across the bus. Long-context generation is not slow because the maths is hard. It is slow
-      because the same gigabytes are hauled through the same bus, over and over.
-    </div>
-
-    <h3 class="text-xl md:text-2xl font-semibold mt-8 mb-2">How big is the cache? The actual formula</h3>
-    <p class="text-gray-700 mb-3">
-      Count the numbers. Two tensors (a key and a value) per token, per layer, per attention head:
+      Attention is charged for twice, in two different currencies. Digesting the prompt costs
+      <span class="kn"><button type="button" class="kn-t">O(T²) of arithmetic, once</button><span class="kn-b"
+        ><span class="kn-p"><b>Prefill.</b> You have <span class="m">T</span> queries, and each attends to
+        up to <span class="m">T</span> keys, each comparison a <span class="m">d</span>-dimensional dot
+        product. That is <span class="m">T × T × d</span> multiply-adds, so
+        <span class="m">O(T²d)</span>.</span
+        ><span class="kn-p">It is <b>quadratic, and it is compute</b>. Every query is independent, so it
+        parallelises beautifully — you are simply buying a lot of arithmetic. Double the prompt,
+        quadruple the work.</span
+      ></span></span>;
+      generating each new token costs
+      <span class="kn"><button type="button" class="kn-t">O(T) of memory traffic, every time</button><span class="kn-b"
+        ><span class="kn-p"><b>Decoding.</b> Now there is exactly <em>one</em> query. It attends to
+        <span class="m">T</span> keys, so the arithmetic is only <span class="m">O(Td)</span> —
+        trivial.</span
+        ><span class="kn-p">But to do it you must fetch all <span class="m">T</span> keys and all
+        <span class="m">T</span> values out of HBM: <span class="m">2Td</span> numbers moved to perform
+        about <span class="m">2Td</span> operations. <b>Roughly one operation per number fetched</b>,
+        against hardware that wants five hundred. The units idle, waiting on memory.</span
+        ><span class="kn-p">So decoding is <b>bandwidth-bound and linear in T per token</b> — and
+        generating <span class="m">N</span> tokens drags <span class="m">O(N·T)</span> bytes across the
+        bus.</span
+      ></span></span>.
+      Long-context generation is not slow because the maths is hard. It is slow because the same
+      gigabytes get hauled through the same bus, over and over.
     </p>
 
-    <div class="my-4 p-4 rounded border-2 border-blue-200 bg-blue-50 font-mono text-sm md:text-base text-gray-900 overflow-x-auto">
-      KV bytes = 2 · L · H<sub>kv</sub> · d<sub>h</sub> · T · p
-      <span class="block mt-2 text-xs text-gray-600 font-sans">
-        2 = one key and one value &nbsp;·&nbsp; L layers &nbsp;·&nbsp; H<sub>kv</sub> key/value heads
-        &nbsp;·&nbsp; d<sub>h</sub> dimensions per head &nbsp;·&nbsp; T tokens &nbsp;·&nbsp; p bytes per number
-      </span>
-    </div>
-
     <p class="text-gray-700 mb-3">
-      Substitute a 7B-class model — 32 layers, 32 heads of 128 (so
-      <span class="font-mono text-sm">H·d<sub>h</sub></span> = 4096), fp16 so
-      <span class="font-mono text-sm">p</span> = 2 — and ask for a 2048-token context:
+      And those gigabytes are not a figure of speech. For a 7B-class model in fp16,
+      <span class="kn"><button type="button" class="kn-t">a 2048-token context costs exactly 1 GiB</button><span class="kn-b"
+        ><span class="kn-p"><b>Count the numbers.</b> Two tensors — one key, one value — per token, per
+        layer, per key/value head:</span
+        ><span class="kn-eq">KV bytes = 2 · L · H<sub>kv</sub> · d<sub>h</sub> · T · p</span
+        ><span class="kn-p">Substitute a 7B shape — 32 layers, 32 heads of 128 (so
+        <span class="m">H·d<sub>h</sub></span> = 4096), fp16 so <span class="m">p</span> = 2 — at
+        <span class="m">T</span> = 2048:</span
+        ><span class="kn-eq">2 × 32 × 4096 × 2048 × 2<br/>= 1,073,741,824 B = <b>1.000 GiB</b></span
+        ><span class="kn-p">Linear in <span class="m">T</span>, so 32K tokens costs 16 GiB and 128K costs
+        64 GiB — for a model whose <em>weights</em> are 13.5 GiB.</span
+        ><span class="kn-p"><b>p</b> is the one factor you can change without touching the architecture,
+        which is why quantised caches are everywhere:</span
+        ><span class="kn-tbl"
+          ><span class="kn-hd">Precision</span><span class="kn-hd">p</span><span class="kn-hd">2048 tokens</span
+          ><span>fp32</span><span>4</span><span>2.00 GiB</span
+          ><span>bf16 / fp16</span><span>2</span><span>1.00 GiB</span
+          ><span>fp8</span><span>1</span><span>0.50 GiB</span
+          ><span>int4</span><span>0.5</span><span>0.25 GiB</span
+        ></span
+        ><span class="kn-p" style="margin-top:8px">Note <span class="m">H<sub>kv</sub></span>, not
+        <span class="m">H</span>: that is <b>grouped-query attention</b>. Let several query heads share
+        one key/value head and the cache shrinks by exactly that ratio — Llama-3-70B uses 64 query heads
+        against 8 KV heads, turning 5.00 GiB into 0.62 GiB.</span
+      ></span></span>
+      of cache. Quantisation and head-sharing attack the constants in that formula, and they help a lot
+      in practice — but they leave the <span class="font-mono text-sm">T</span> exactly where it is. That
+      is the factor linear attention goes after.
     </p>
 
-    <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-sm text-gray-900 overflow-x-auto">
-      2 × 32 × 4096 × 2048 × 2 = 1,073,741,824 bytes = <b>exactly 1.000 GiB</b>
-    </div>
-
     <p class="text-gray-700 mb-3">
-      That is a useful number to carry around: for a model of this shape, <b>a 2K context costs 1 GiB of
-      cache, in fp16</b>. It is linear in <span class="font-mono text-sm">T</span>, so 32K tokens costs
-      16 GiB and 128K costs 64 GiB — for a 7B model whose <em>weights</em> are only 13.5 GiB. Past a
-      certain context the cache is the larger object by far.
-    </p>
-    <p class="text-gray-700 mb-3">
-      And <span class="font-mono text-sm">p</span> is the one factor you can change without touching the
-      architecture, which is why quantised caches are everywhere:
-    </p>
-
-    <div class="overflow-x-auto my-4">
-      <table class="w-full max-w-lg text-sm border-collapse">
-        <thead><tr class="border-b-2 border-gray-300 text-left">
-          <th class="py-2 pr-6 font-semibold">Precision</th>
-          <th class="py-2 pr-6 font-semibold">p (bytes)</th>
-          <th class="py-2 font-semibold">Cache for 2048 tokens</th>
-        </tr></thead>
-        <tbody class="font-mono">
-          <tr class="border-b border-gray-200"><td class="py-1.5 pr-6">fp32</td><td class="pr-6">4</td><td>2.00 GiB</td></tr>
-          <tr class="border-b border-gray-200 bg-blue-50"><td class="py-1.5 pr-6">bf16 / fp16</td><td class="pr-6">2</td><td>1.00 GiB</td></tr>
-          <tr class="border-b border-gray-200"><td class="py-1.5 pr-6">fp8</td><td class="pr-6">1</td><td>0.50 GiB</td></tr>
-          <tr><td class="py-1.5 pr-6">int4</td><td class="pr-6">0.5</td><td>0.25 GiB</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <p class="text-gray-700 mb-3">
-      Note <span class="font-mono text-sm">H<sub>kv</sub></span> rather than
-      <span class="font-mono text-sm">H</span> in the formula. That is <b>grouped-query attention</b>:
-      let several query heads share one key/value head and the cache shrinks by exactly that ratio.
-      Llama-3-70B uses 64 query heads against 8 KV heads, turning a 5.00 GiB cache into 0.62 GiB. GQA and
-      quantisation are both attacks on the constants — worth a lot in practice, and they leave the
-      <span class="font-mono text-sm">T</span> exactly where it is. That is the part linear attention goes after.
-    </p>
-
-    <h3 class="text-xl md:text-2xl font-semibold mt-8 mb-2">What we are trading it for</h3>
-    <p class="text-gray-700 mb-3">
-      The rest of this post builds a mechanism whose memory is a fixed-size matrix instead. Its size, for
-      comparison — note what is <em>missing</em> from the formula:
-    </p>
-
-    <div class="my-4 p-4 rounded border-2 border-green-200 bg-green-50 font-mono text-sm md:text-base text-gray-900 overflow-x-auto">
-      state bytes = L · H · d<sub>k</sub> · d<sub>v</sub> · p &nbsp;&nbsp;&nbsp;<span class="font-sans text-green-800 text-xs">no T</span><br/>
-      <span class="text-xs">32 × 32 × 128 × 128 × 2 = <b>32 MiB</b>, at 2K tokens or at 2M</span>
-    </div>
-
-    <p class="text-gray-700 mb-3">
-      Setting the two formulas equal gives the crossover: below about <b>64 tokens</b> the fixed state is
-      the <em>bigger</em> object, and above it the KV cache runs away. That is the whole trade, and the
-      figure below is just these two formulas with a slider on them.
+      The rest of this post builds a mechanism whose memory is
+      <span class="kn"><button type="button" class="kn-t">a fixed-size matrix instead — 32 MiB whether the context is 2K or 2M</button><span class="kn-b"
+        ><span class="kn-p">The same count, for one <span class="m">d<sub>k</sub> × d<sub>v</sub></span>
+        state per head per layer. Note what is <em>missing</em>:</span
+        ><span class="kn-eq kn-eq-ok">state bytes = L · H · d<sub>k</sub> · d<sub>v</sub> · p&nbsp;&nbsp;<b>← no T</b><br/><br/>32 × 32 × 128 × 128 × 2<br/>= 33,554,432 B = <b>32 MiB</b></span
+        ><span class="kn-p">Setting the two formulas equal gives the crossover: below about <b>64
+        tokens</b> the fixed state is the <em>bigger</em> object. Above it, the KV cache runs away and
+        never comes back.</span
+      ></span></span>.
+      The figure below is just those two formulas with a slider on them.
     </p>
 
     <div data-widget="cache-growth"></div>
@@ -828,4 +798,5 @@ export const frontmatter = {
   </section>
 
   <script type="module" src="/kimi-linear/widgets.js"></script>
+  <script type="module" src="/kimi-linear/notes.js"></script>
 </BlogPostLayout>
