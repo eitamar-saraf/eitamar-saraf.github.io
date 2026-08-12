@@ -21,8 +21,8 @@ export const frontmatter = {
     This post builds that equation up one piece at a time, with figures you can poke at — every one
     of which runs the real recurrence in your browser rather than replaying a recording. Then it
     reports what happened when I trained the whole family myself on two RTX 3090s, including the
-    parts that did not reproduce and the four bugs that made everything look fine while being
-    completely wrong. If you know what attention and a training loop are, you have enough to follow along.
+    parts that did not reproduce and the five mistakes that made everything look fine while being
+    wrong. If you know what attention and a training loop are, you have enough to follow along.
   </p>
 
   <div class="mb-6 p-4 rounded border bg-blue-50 text-blue-900">
@@ -40,16 +40,17 @@ export const frontmatter = {
     <ol class="list-decimal list-inside space-y-0.5">
       <li><a href="#bill" class="text-blue-700 hover:underline">The bill comes due</a></li>
       <li><a href="#parentheses" class="text-blue-700 hover:underline">Moving the parentheses</a></li>
-      <li><a href="#interference" class="text-blue-700 hover:underline">The memory interferes with itself</a></li>
-      <li><a href="#delta" class="text-blue-700 hover:underline">Attention as online learning</a></li>
-      <li><a href="#forgetting" class="text-blue-700 hover:underline">Learning to forget</a></li>
+      <li><a href="#memory" class="text-blue-700 hover:underline">That state is a lookup table</a></li>
+      <li><a href="#overwriting" class="text-blue-700 hover:underline">Problem one: writing twice adds</a></li>
+      <li><a href="#crowding" class="text-blue-700 hover:underline">Problem two: too many keys</a></li>
+      <li><a href="#forgetting" class="text-blue-700 hover:underline">Problem three: never forgetting</a></li>
       <li><a href="#kda" class="text-blue-700 hover:underline">KDA: one dial per channel</a></li>
       <li><a href="#position" class="text-blue-700 hover:underline">The decay is a positional encoding</a></li>
       <li><a href="#fast" class="text-blue-700 hover:underline">Making it fast</a></li>
       <li><a href="#hybrid" class="text-blue-700 hover:underline">The hybrid</a></li>
       <li><a href="#results" class="text-blue-700 hover:underline">Does it hold up?</a></li>
-      <li><a href="#wrong" class="text-blue-700 hover:underline">Four things I got wrong</a></li>
-    </ol>
+      <li><a href="#wrong" class="text-blue-700 hover:underline">Five things I got wrong</a></li>
+      </ol>
   </nav>
 
   <!-- ============================================================ 1 -->
@@ -125,86 +126,160 @@ export const frontmatter = {
   </section>
 
   <!-- ============================================================ 3 -->
-  <section id="interference" class="mt-10">
-    <h2 class="text-3xl md:text-4xl font-bold mb-3">3. The memory interferes with itself</h2>
+  <!-- ============================================================ 3 -->
+  <section id="memory" class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">3. That state is a lookup table</h2>
     <p class="text-gray-700 mb-3">
-      That state has a name outside deep learning: it is an <b>associative memory</b>, the same object
-      Hopfield networks and "fast weights" are built from. You write pairs into it with an outer
-      product and read them back by multiplying with a key. So what happens when you write several?
-    </p>
-    <p class="text-gray-700 mb-3">
-      Store pairs <span class="font-mono text-sm">(k₁,v₁) … (kₙ,vₙ)</span>, then query with
-      <span class="font-mono text-sm">k<sub>j</sub></span>:
+      Before anything goes wrong, let's be concrete about what <span class="font-mono text-sm">S</span>
+      <em>is</em>. Take a two-dimensional example and write two pairs into it:
     </p>
 
     <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-sm text-gray-900 overflow-x-auto">
-      Sᵀk<sub>j</sub> = ‖k<sub>j</sub>‖² v<sub>j</sub> &nbsp;+&nbsp; Σ<sub>i≠j</sub> (k<sub>i</sub>·k<sub>j</sub>) v<sub>i</sub><br/>
-      <span class="text-gray-500">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;the value you wanted&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;everything else, leaking</span>
+      k₁ = [1, 0]&nbsp;&nbsp;&nbsp;v₁ = [5, 0]<br/>
+      k₂ = [0, 1]&nbsp;&nbsp;&nbsp;v₂ = [0, 7]<br/><br/>
+      S = k₁v₁ᵀ + k₂v₂ᵀ = [[5, 0],&nbsp;&nbsp;+&nbsp;&nbsp;[[0, 0],&nbsp;&nbsp;=&nbsp;&nbsp;[[5, 0],<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[0, 0]]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[0, 7]]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[0, 7]]
     </div>
 
     <p class="text-gray-700 mb-3">
-      The second term vanishes only if the keys are mutually orthogonal — and a
-      <span class="font-mono text-sm">d</span>-dimensional space holds at most
-      <span class="font-mono text-sm">d</span> orthogonal directions. Past that, every write corrupts
-      the others, permanently, because nothing in this rule ever erases. Add pairs in the figure below
-      and watch the answer degrade.
+      Now read it back with <span class="font-mono text-sm">q = k₁</span>:
     </p>
 
-    <div data-widget="interference"></div>
+    <div class="my-4 p-4 rounded border-2 border-green-200 bg-green-50 font-mono text-sm text-gray-900 overflow-x-auto">
+      Sᵀq = [5, 0] = v₁ &nbsp;&nbsp;&nbsp;<span class="font-sans text-green-800">exactly what was stored</span>
+    </div>
 
     <p class="text-gray-700 mb-3">
-      Leave that checkbox unticked for now — we are about to earn it.
+      So <b>S is a lookup table built by addition</b>. Writing is "add an outer product"; reading is
+      "multiply by a key". That is the whole mechanism, and it is the object every remaining idea in
+      this post modifies.
+    </p>
+    <p class="text-gray-700 mb-3">
+      It worked perfectly there for one reason: <span class="font-mono text-sm">k₁</span> and
+      <span class="font-mono text-sm">k₂</span> are perpendicular. Take that away and things break —
+      in <em>two separate ways</em> that are worth keeping apart, because they have different fixes
+      and only one of them is the delta rule's.
     </p>
   </section>
 
   <!-- ============================================================ 4 -->
-  <section id="delta" class="mt-10">
-    <h2 class="text-3xl md:text-4xl font-bold mb-3">4. Attention as online learning</h2>
+  <section id="overwriting" class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">4. Problem one: writing twice adds instead of replaces</h2>
     <p class="text-gray-700 mb-3">
-      The most useful reframing in this literature: treat the state not as a container but as a
-      <em>model being trained during the forward pass</em>. Each token is one training example, and the
-      update rule is one optimiser step. What differs between architectures is the loss they descend.
-    </p>
-    <p class="text-gray-700 mb-3">
-      Plain linear attention descends
-      <span class="font-mono text-sm">ℒ = −⟨Sᵀk<sub>t</sub>, v<sub>t</sub>⟩</span>. That objective is
-      unbounded — it rewards making the response to <span class="font-mono text-sm">k<sub>t</sub></span>
-      ever larger, with no notion of "enough" and no criterion for what to erase. Hence the pile-up.
-    </p>
-    <p class="text-gray-700 mb-3">
-      DeltaNet descends something with a floor:
+      Write <span class="font-mono text-sm">(k, v₁)</span>, then later write
+      <span class="font-mono text-sm">(k, v₂)</span> — the same key, a new value. The state is a sum,
+      and a sum has no notion of replacing, so it holds both:
     </p>
 
-    <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-sm md:text-base text-gray-900 overflow-x-auto">
-      ℒ<sub>t</sub>(S) = ½ ‖ Sᵀk<sub>t</sub> − v<sub>t</sub> ‖²
+    <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-sm text-gray-900 overflow-x-auto">
+      S = k v₁ᵀ + k v₂ᵀ &nbsp;&nbsp;⟹&nbsp;&nbsp; Sᵀk = v₁ + v₂ &nbsp;&nbsp;&nbsp;<span class="font-sans text-gray-500">(for a unit-length k)</span>
     </div>
 
     <p class="text-gray-700 mb-3">
-      One gradient step with learning rate <span class="font-mono text-sm">β<sub>t</sub></span> gives
-      the <b>delta rule</b>:
+      You asked for the current value and got the sum of every value that key has ever held. Write it
+      eight times and you get all eight added together.
     </p>
 
-    <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-sm md:text-base text-gray-900 overflow-x-auto">
-      S<sub>t</sub> = S<sub>t−1</sub> + β<sub>t</sub> k<sub>t</sub> ( v<sub>t</sub> − S<sub>t−1</sub>ᵀ k<sub>t</sub> )ᵀ
+    <div data-widget="overwrite"></div>
+
+    <h3 class="text-xl md:text-2xl font-semibold mt-8 mb-2">The fix: write the error, not the value</h3>
+    <p class="text-gray-700 mb-3">
+      Before writing, ask the memory what it already answers for this key. Then write only the
+      <em>difference</em>:
+    </p>
+
+    <div class="my-4 p-4 rounded border-2 border-blue-200 bg-blue-50 font-mono text-sm md:text-base text-gray-900 overflow-x-auto">
+      S<sub>t</sub> = S<sub>t−1</sub> + β<sub>t</sub> k<sub>t</sub> ( v<sub>t</sub> − S<sub>t−1</sub>ᵀk<sub>t</sub> )ᵀ
+      <span class="block mt-2 text-xs text-gray-600 font-sans">the delta rule — the parenthesis is the error between what's stored and what you meant to store</span>
     </div>
 
     <p class="text-gray-700 mb-3">
-      Read the parenthesis: <span class="font-mono text-sm">S<sub>t−1</sub>ᵀk<sub>t</sub></span> is what
-      the memory <em>already answers</em> for this key. The rule writes the <b>error</b>, not the value.
-      Write a key twice and the second write corrects the first instead of stacking on top of it. Go
-      back and tick the checkbox in the figure above — the retrieval error collapses.
+      Work the same example: the memory already answers <span class="font-mono text-sm">v₁</span>, you
+      want <span class="font-mono text-sm">v₂</span>, so you write
+      <span class="font-mono text-sm">v₂ − v₁</span>. Total stored:
+      <span class="font-mono text-sm">v₁ + (v₂ − v₁) = v₂</span>. The old value is gone. Toggle the
+      figure above and the error drops to zero and <em>stays</em> there however many times you write.
     </p>
-    <p class="text-gray-700 mb-3">
-      And <span class="font-mono text-sm">β<sub>t</sub></span> is a genuine learning rate: 0 writes
-      nothing, 1 overwrites exactly, in between converges geometrically.
-    </p>
+
+    <details class="not-prose my-5 rounded border border-gray-200 bg-gray-50">
+      <summary class="cursor-pointer px-4 py-2.5 text-sm font-medium text-blue-700 hover:bg-gray-100 select-none">Show why this is gradient descent</summary>
+      <div class="px-4 pb-4 pt-1 text-sm text-gray-700 space-y-2">
+        <p>Treat the state as a little model being fitted during the forward pass. A sensible thing to want is that querying with <span class="font-mono">k<sub>t</sub></span> returns <span class="font-mono">v<sub>t</sub></span>, so score it by squared error:</p>
+        <p class="font-mono text-xs md:text-sm bg-white rounded border p-3">ℒ<sub>t</sub>(S) = ½ ‖ Sᵀk<sub>t</sub> − v<sub>t</sub> ‖²</p>
+        <p>Differentiate with respect to <span class="font-mono">S</span>. The gradient of a squared error is (input) × (error)ᵀ:</p>
+        <p class="font-mono text-xs md:text-sm bg-white rounded border p-3">∇<sub>S</sub> ℒ<sub>t</sub> = k<sub>t</sub> ( Sᵀk<sub>t</sub> − v<sub>t</sub> )ᵀ</p>
+        <p>Take one gradient step, <span class="font-mono">S ← S − β ∇</span>:</p>
+        <p class="font-mono text-xs md:text-sm bg-white rounded border p-3">S<sub>t</sub> = S<sub>t−1</sub> − β<sub>t</sub> k<sub>t</sub>( S<sub>t−1</sub>ᵀk<sub>t</sub> − v<sub>t</sub> )ᵀ = S<sub>t−1</sub> + β<sub>t</sub> k<sub>t</sub>( v<sub>t</sub> − S<sub>t−1</sub>ᵀk<sub>t</sub> )ᵀ</p>
+        <p>Which is the delta rule exactly. So <span class="font-mono">β<sub>t</sub></span> is not a coefficient someone chose for tidiness — it is a <b>learning rate</b>, and the layer is running one step of SGD per token. Expanding the bracket gives the form the paper writes, <span class="font-mono">(I − β<sub>t</sub>k<sub>t</sub>k<sub>t</sub>ᵀ)S<sub>t−1</sub> + β<sub>t</sub>k<sub>t</sub>v<sub>t</sub>ᵀ</span>.</p>
+      </div>
+    </details>
 
     <div data-widget="beta"></div>
   </section>
 
   <!-- ============================================================ 5 -->
+  <section id="crowding" class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">5. Problem two: too many keys, and this one has no fix</h2>
+    <p class="text-gray-700 mb-3">
+      Now every key is <em>different</em>, and none are perpendicular. Read one back and you get what
+      you stored plus a share of everything else:
+    </p>
+
+    <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-sm text-gray-900 overflow-x-auto">
+      Sᵀk<sub>j</sub> = v<sub>j</sub> &nbsp;+&nbsp; Σ<sub>i≠j</sub> (k<sub>i</sub>·k<sub>j</sub>) v<sub>i</sub><br/>
+      <span class="text-gray-500 font-sans text-xs">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;what you wanted&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;everything else, weighted by key overlap</span>
+    </div>
+
+    <p class="text-gray-700 mb-3">
+      Concretely, with <span class="font-mono text-sm">k₁ = [1, 0]</span> and a second key tilted to
+      <span class="font-mono text-sm">k₂ = [0.8, 0.6]</span>:
+    </p>
+
+    <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-sm text-gray-900 overflow-x-auto">
+      Sᵀk₁ = [5, 0] + 0.8·[0, 7] = [5, <span class="text-orange-600 font-bold">5.6</span>]<br/>
+      <span class="text-gray-500 font-sans text-xs">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;wanted v₁ = [5, 0]; the 5.6 is k₂'s value bleeding through, scaled by the 0.8 overlap</span>
+    </div>
+
+    <p class="text-gray-700 mb-3">
+      The leak vanishes only when the keys are mutually perpendicular, and a
+      <span class="font-mono text-sm">d</span>-dimensional space has only
+      <span class="font-mono text-sm">d</span> perpendicular directions. Past
+      <span class="font-mono text-sm">d</span> keys, no arrangement avoids it.
+    </p>
+
+    <div class="my-5 p-4 rounded border-l-4 border-amber-400 bg-amber-50 text-gray-800">
+      <b>The delta rule does not fix this one</b>, and I originally wrote that it did. It corrects each
+      key in turn, but correcting a later key disturbs an earlier one whenever the two keys overlap — so
+      in a single pass it is no better than plain addition, and sometimes slightly worse. What it does
+      buy is a <em>ceiling</em>: as you overload the memory, plain error keeps climbing while the delta
+      rule's flattens. Crowding is not a defect in the update rule. It is what a fixed-size state costs,
+      and only more dimensions buy more room.
+    </div>
+
+    <div data-widget="crowding"></div>
+
+    <p class="text-gray-700 mb-3">
+      So there are <b>three</b> distinct things that go wrong with a fixed-size memory, and it is worth
+      holding them apart — because the rest of this post is three different fixes:
+    </p>
+
+    <div class="overflow-x-auto my-4">
+      <table class="w-full text-sm border-collapse">
+        <thead><tr class="border-b-2 border-gray-300 text-left">
+          <th class="py-2 pr-4 font-semibold">Problem</th>
+          <th class="py-2 pr-4 font-semibold">What goes wrong</th>
+          <th class="py-2 font-semibold">What fixes it</th>
+        </tr></thead>
+        <tbody>
+          <tr class="border-b border-gray-200"><td class="py-2 pr-4 font-semibold">Overwriting</td><td class="pr-4">re-writing a key adds to it instead of replacing</td><td>the delta rule — completely</td></tr>
+          <tr class="border-b border-gray-200"><td class="py-2 pr-4 font-semibold">Crowding</td><td class="pr-4">more keys than the state has perpendicular directions</td><td>nothing but a bigger state</td></tr>
+          <tr class="bg-blue-50"><td class="py-2 pr-4 font-semibold">Staleness</td><td class="pr-4">facts from long ago still hold capacity</td><td class="font-semibold">the gate — and this is where KDA lives</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
   <section id="forgetting" class="mt-10">
-    <h2 class="text-3xl md:text-4xl font-bold mb-3">5. Learning to forget</h2>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">6. Problem three: never forgetting</h2>
     <p class="text-gray-700 mb-3">
       The delta rule stops keys from corrupting each other, but it still never forgets. A fact written
       at token 5 is as vivid at token 500,000 as the day it arrived, competing for the same finite
@@ -226,7 +301,7 @@ export const frontmatter = {
 
   <!-- ============================================================ 6 -->
   <section id="kda" class="mt-10">
-    <h2 class="text-3xl md:text-4xl font-bold mb-3">6. KDA: one dial per channel</h2>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">7. KDA: one dial per channel</h2>
     <p class="text-gray-700 mb-3">
       Here is the paper's contribution, in full:
     </p>
@@ -283,7 +358,7 @@ export const frontmatter = {
 
   <!-- ============================================================ 7 -->
   <section id="position" class="mt-10">
-    <h2 class="text-3xl md:text-4xl font-bold mb-3">7. The decay is a positional encoding</h2>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">8. The decay is a positional encoding</h2>
     <p class="text-gray-700 mb-3">
       This is the most elegant observation in the paper and it is easy to miss. Unroll the recurrence
       and the contribution of token <span class="font-mono text-sm">i</span> to the state at token
@@ -310,7 +385,7 @@ export const frontmatter = {
 
   <!-- ============================================================ 8 -->
   <section id="fast" class="mt-10">
-    <h2 class="text-3xl md:text-4xl font-bold mb-3">8. Making it fast</h2>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">9. Making it fast</h2>
     <p class="text-gray-700 mb-3">
       Everything above is a sequential loop, which is the worst possible shape for a GPU: thousands of
       tiny dependent matrix updates, none big enough to fill a tensor core. The fix is to process the
@@ -358,7 +433,7 @@ export const frontmatter = {
 
   <!-- ============================================================ 9 -->
   <section id="hybrid" class="mt-10">
-    <h2 class="text-3xl md:text-4xl font-bold mb-3">9. The hybrid</h2>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">10. The hybrid</h2>
     <p class="text-gray-700 mb-3">
       Here the paper is refreshingly honest: pure linear attention still loses at exact copying and
       precise long-range retrieval, and no amount of gating fixes it, because a fixed-size state
@@ -378,7 +453,7 @@ export const frontmatter = {
 
   <!-- ============================================================ 10 -->
   <section id="results" class="mt-10">
-    <h2 class="text-3xl md:text-4xl font-bold mb-3">10. Does it hold up?</h2>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">11. Does it hold up?</h2>
     <p class="text-gray-700 mb-3">
       I trained the whole family on two RTX 3090s: all six architectures plus a softmax baseline on
       three synthetic tasks, the kernel benchmarks, and a small language-model sweep over the hybrid
@@ -533,14 +608,26 @@ export const frontmatter = {
 
   <!-- ============================================================ 11 -->
   <section id="wrong" class="mt-10">
-    <h2 class="text-3xl md:text-4xl font-bold mb-3">11. Four things I got wrong</h2>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">12. Five things I got wrong</h2>
     <p class="text-gray-700 mb-3">
       Reimplementing this was mostly a lesson in how many ways an experiment can look healthy while
       measuring nothing. All four of these produced plausible curves.
     </p>
 
     <p class="text-gray-700 mb-3">
-      <b>1. <span class="font-mono text-sm">inf × 0 = NaN</span>.</b> In the decay-weighted Gram matrix
+      <b>1. I asserted the wrong mechanism, in public.</b> An earlier version of this post claimed the
+      delta rule fixes the crowding in §5 — and the figure beside that claim was, at the time, printing
+      numbers that contradicted it (0.51 with the delta rule against 0.45 without). A reader who knows
+      decoder architectures told me the post lost him, I went back to check the step he was stuck on,
+      and found this instead. The cause was the same as the symptom he reported: I compressed three
+      separate failures into one sentence, and the physics did not survive the compression. What the
+      delta rule actually fixes is <em>overwriting</em>, exactly and completely; crowding is the price of
+      a fixed-size state and only more dimensions buy it down. §4 and §5 are now the corrected version,
+      and the figures are two rather than one.
+    </p>
+
+    <p class="text-gray-700 mb-3">
+      <b>2. <span class="font-mono text-sm">inf × 0 = NaN</span>.</b> In the decay-weighted Gram matrix
       I computed the exponential first and masked the upper triangle afterwards. Above the diagonal the
       exponent is large and positive, so those entries overflowed to infinity — and infinity times a
       zero mask is not zero, it is NaN. Clamping the exponent before exponentiating fixes it, and the
@@ -548,7 +635,7 @@ export const frontmatter = {
     </p>
 
     <p class="text-gray-700 mb-3">
-      <b>2. A zero bias that erases the memory.</b> The decay is
+      <b>3. A zero bias that erases the memory.</b> The decay is
       <span class="font-mono text-sm">log α = −exp(A) · softplus(·)</span>. Initialising that
       projection's bias to zero gives <span class="font-mono text-sm">softplus(0) = 0.69</span>, and with
       <span class="font-mono text-sm">exp(A)</span> up to 16 that is a decay of
@@ -559,7 +646,7 @@ export const frontmatter = {
     </p>
 
     <p class="text-gray-700 mb-3">
-      <b>3. The decay initialisation silently decides the result.</b> Even with Mamba's standard
+      <b>4. The decay initialisation silently decides the result.</b> Even with Mamba's standard
       <span class="font-mono text-sm">dt ∈ [10⁻³, 10⁻¹]</span>, the same model scored <b>1.00 on MQAR at
       T = 512 and 0.37 at T = 1024</b>. Not capacity — at T = 1024 it still solved four pairs perfectly.
       Purely the initialisation: no channel started with a memory timescale long enough to reach the
@@ -568,7 +655,7 @@ export const frontmatter = {
     </p>
 
     <p class="text-gray-700 mb-3">
-      <b>4. My baseline was crippled and I nearly believed it.</b> Every linear variant carries a short
+      <b>5. My baseline was crippled and I nearly believed it.</b> Every linear variant carries a short
       convolution, which hands it a "look at the previous token" operation for free. My softmax
       attention baseline did not have one, and it stalled at 0.32 on MQAR while KDA scored 1.00 — a
       result that would have read as "linear attention beats attention at recall", which is the
