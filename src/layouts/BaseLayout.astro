@@ -1,6 +1,11 @@
 ---
 import NavBar from '../components/NavBar.astro';
-const { children } = Astro.props;
+const { children, pageTitle, description } = Astro.props;
+// BlogPostLayout has always passed pageTitle here; this file used to ignore it, so
+// every page -- including each post -- shipped the same <title>. Falls back to the
+// site name, so pages that pass nothing are unchanged.
+const SITE = 'Eitamar Saraf';
+const title = pageTitle ? `${pageTitle} — ${SITE}` : `${SITE} Portfolio`;
 import '../styles/global.css';
 ---
 <html lang="en">
@@ -8,7 +13,11 @@ import '../styles/global.css';
     <meta charset="utf-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width" />
-  <title>Eitamar Saraf Portfolio</title>
+  <title>{title}</title>
+    {description && <meta name="description" content={description} />}
+    <meta property="og:title" content={title} />
+    {description && <meta property="og:description" content={description} />}
+    <meta property="og:type" content="article" />
   </head>
   <body class="min-h-screen bg-gray-50 text-gray-900">
   <NavBar />
