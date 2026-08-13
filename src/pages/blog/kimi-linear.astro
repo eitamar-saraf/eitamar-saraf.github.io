@@ -9,30 +9,35 @@ export const frontmatter = {
 
 <BlogPostLayout frontmatter={frontmatter}>
   <p class="mb-6 text-gray-700">
-    Attention has a bill that comes due at long context: every token you have already read has to be
-    kept around, forever, in case a later token wants to look at it. <b>Kimi Linear</b> is the first
-    hybrid linear-attention architecture its authors claim beats full attention outright — not
-    "close enough for the speedup", but better, on short context as well as long. At its centre is
-    <b>Kimi Delta Attention</b>, and KDA turns out to differ from its predecessor by exactly one
-    thing: a knob that used to be a single number became a vector.
+    To generate one more token, attention re-reads every key and value it has stored for every token
+    that came before it. That is why it recalls things precisely — nothing was ever thrown away — and
+    it is also why a long context costs gigabytes of GPU memory that have to be dragged across the
+    memory bus once per token generated.
   </p>
 
   <p class="mb-6 text-gray-700">
-    This post builds that equation up one piece at a time, with figures you can poke at — every one
-    of which runs the real recurrence in your browser rather than replaying a recording. Then it
-    reports what happened when I trained the whole family myself on two RTX 3090s, including the
-    parts that did not reproduce and the five mistakes that made everything look fine while being
-    wrong. If you know what attention and a training loop are, you have enough to follow along.
+    <b>Kimi Linear</b> replaces most of that with a fixed-size summary: instead of keeping a transcript
+    that grows with every token, keep one matrix and update it as you read. This post builds that matrix
+    up from nothing, watches it break in three specific ways, and fixes each break in turn. The third
+    fix is <b>Kimi Delta Attention</b>, and it is a surprisingly small change — one number becomes a
+    vector.
+  </p>
+
+  <p class="mb-6 text-gray-700">
+    You need to know what attention does and roughly what a training loop is; everything else gets built
+    here. The figures are live, so drag them. And §11 is what happened when I trained all of this myself
+    on two RTX 3090s — what reproduced, what didn't, and where I got it wrong.
   </p>
 
   <div class="mb-6 p-4 rounded border bg-blue-50 text-blue-900">
-    <b>TL;DR.</b> Linear attention replaces the KV cache with one fixed-size matrix — an associative
-    memory. That memory <i>interferes</i> with itself, which the <b>delta rule</b> fixes by writing the
-    prediction error instead of the value, and which <b>gating</b> further fixes by letting old entries
-    fade. Gated DeltaNet gives each attention head one forgetting rate; <b>KDA gives every channel its
-    own</b>. That single change is the paper's contribution, and it also lets the decay act as a learned
-    positional encoding, which is why the full-attention layers in Kimi Linear have no positional
-    encoding at all.
+    <b>TL;DR.</b> Linear attention swaps the ever-growing KV cache for a single fixed-size matrix — a
+    lookup table you write into with one token and read out of with another. Three separate things then
+    go wrong with it, and they are worth keeping apart: <b>re-writing a key adds instead of replacing</b>
+    (the delta rule fixes this, exactly); <b>too many keys crowd each other</b> (nothing fixes this but a
+    bigger matrix); and <b>old entries never fade</b> (this is what gating fixes). Gated DeltaNet's gate
+    gives each attention head a single forgetting rate. <b>KDA gives every channel its own</b> — that is
+    the paper's contribution, and it also turns the decay into a learned positional encoding, which is
+    why Kimi Linear's full-attention layers carry no positional encoding at all.
   </div>
 
   <nav class="mb-6 p-4 rounded border bg-gray-50 text-gray-700 text-sm md:text-base">
@@ -381,7 +386,18 @@ export const frontmatter = {
       The delta rule stops keys from corrupting each other, but it still never forgets. A fact written
       at token 5 is as vivid at token 500,000 as the day it arrived, competing for the same finite
       capacity. <b>Gated DeltaNet</b> adds a decay
-      <span class="font-mono text-sm">α<sub>t</sub> ∈ [0,1]</span> — weight decay on the fast weights:
+      <span class="font-mono text-sm">α<sub>t</sub> ∈ [0,1]</span> — weight decay on the
+      <span class="kn"><button type="button" class="kn-t">fast weights</button><span class="kn-b"
+        ><span class="kn-p"><b>Two sets of weights, on two timescales.</b></span
+        ><span class="kn-p">The ordinary weights — the projections, the MLPs — are learned by gradient
+        descent over the whole training run and then frozen. Call those the <em>slow</em> weights.</span
+        ><span class="kn-p">The state <span class="m">S</span> is also a matrix that gets multiplied by
+        an input to produce an output, which makes it a weight matrix too — except it is written during
+        the forward pass, one update per token, and thrown away at the end of the sequence. Those are
+        the <b>fast weights</b> (Schmidhuber, 1992; Schlag et al., 2021).</span
+        ><span class="kn-p">It is a useful frame because it makes "weight decay" mean exactly what it
+        normally means: shrink the weights a little at every step so old contributions fade.</span
+      ></span></span>:
     </p>
 
     <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-sm md:text-base text-gray-900 overflow-x-auto">
