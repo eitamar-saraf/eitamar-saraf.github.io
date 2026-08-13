@@ -117,8 +117,21 @@ export const frontmatter = {
         ><span class="kn-p"><b>Count the numbers.</b> Two tensors — one key, one value — per token, per
         layer, per key/value head:</span
         ><span class="kn-eq">KV bytes = 2 · L · H<sub>kv</sub> · d<sub>h</sub> · T · p</span
-        ><span class="kn-p">Substitute a 7B shape — 32 layers, 32 heads of 128 (so
-        <span class="m">H·d<sub>h</sub></span> = 4096), fp16 so <span class="m">p</span> = 2 — at
+        ><span class="kn-legend"
+          ><span class="kn-hd">symbol</span><span class="kn-hd">what it is</span><span class="kn-hd">here</span
+          ><span class="kn-sym">2</span><span>one key <em>and</em> one value stored per token — the only constant in the formula</span><span class="kn-val">2</span
+          ><span class="kn-sym">L</span><span>layers that keep a cache. In a plain transformer that is every block</span><span class="kn-val">32</span
+          ><span class="kn-sym">H<sub>kv</sub></span><span>key/value heads per layer. Equals <span class="m">H</span> unless the model shares them</span><span class="kn-val">32</span
+          ><span class="kn-sym">H</span><span>query heads per layer. Does <em>not</em> enter the cache size — only <span class="m">H<sub>kv</sub></span> does</span><span class="kn-val">32</span
+          ><span class="kn-sym">d<sub>h</sub></span><span>width of one head, so <span class="m">H · d<sub>h</sub></span> = the model width (4096 here)</span><span class="kn-val">128</span
+          ><span class="kn-sym">T</span><span>tokens currently in the context — <b>the one that grows</b></span><span class="kn-val">2,048</span
+          ><span class="kn-sym">p</span><span>bytes per stored number, i.e. the precision</span><span class="kn-val">2</span
+        ></span
+        ><span class="kn-p">Those are not invented: for any model on the Hub they are
+        <span class="m">num_hidden_layers</span>, <span class="m">num_key_value_heads</span>,
+        <span class="m">num_attention_heads</span> and
+        <span class="m">hidden_size / num_attention_heads</span> in its
+        <span class="m">config.json</span>. Substituting the 7B shape above, in fp16, at
         <span class="m">T</span> = 2048:</span
         ><span class="kn-eq">2 × 32 × 4096 × 2048 × 2<br/>= 1,073,741,824 B = <b>1.000 GiB</b></span
         ><span class="kn-p">Linear in <span class="m">T</span>, so 32K tokens costs 16 GiB and 128K costs
@@ -148,6 +161,11 @@ export const frontmatter = {
         ><span class="kn-p">The same count, for one <span class="m">d<sub>k</sub> × d<sub>v</sub></span>
         state per head per layer. Note what is <em>missing</em>:</span
         ><span class="kn-eq kn-eq-ok">state bytes = L · H · d<sub>k</sub> · d<sub>v</sub> · p&nbsp;&nbsp;<b>← no T</b><br/><br/>32 × 32 × 128 × 128 × 2<br/>= 33,554,432 B = <b>32 MiB</b></span
+        ><span class="kn-legend"
+          ><span class="kn-sym">L, H, p</span><span>as above — layers, heads per layer, bytes per number</span><span class="kn-val">32, 32, 2</span
+          ><span class="kn-sym">d<sub>k</sub></span><span>key width: the <em>rows</em> of the state matrix, one per key channel</span><span class="kn-val">128</span
+          ><span class="kn-sym">d<sub>v</sub></span><span>value width: the <em>columns</em>. So each head holds one <span class="m">d<sub>k</sub> × d<sub>v</sub></span> matrix</span><span class="kn-val">128</span
+        ></span
         ><span class="kn-p">Setting the two formulas equal gives the crossover: below about <b>64
         tokens</b> the fixed state is the <em>bigger</em> object. Above it, the KV cache runs away and
         never comes back.</span
