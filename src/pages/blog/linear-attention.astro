@@ -1,0 +1,381 @@
+---
+import BlogPostLayout from '../../layouts/BlogPostLayout.astro';
+import SeriesNav from '../../components/SeriesNav.astro';
+
+export const frontmatter = {
+  title: 'Attention without a KV cache',
+  pubDate: '2026-08-16',
+  description: 'What the KV cache actually costs, why the softmax is the thing that forbids a fixed-size memory, and how to build one instead.',
+};
+---
+
+<BlogPostLayout frontmatter={frontmatter}>
+  <SeriesNav current="linear-attention" />
+
+  <p class="mb-6 text-gray-700">
+    To generate one more token, attention re-reads every key and value it has stored for every token
+    that came before it. That is why it recalls things precisely — nothing was ever thrown away — and
+    it is also why a long context costs gigabytes of GPU memory that have to be dragged across the
+    memory bus once per token generated.
+  </p>
+
+  <p class="mb-6 text-gray-700">
+    This part works out what that actually costs, then builds the alternative: one fixed-size matrix,
+    updated as you read, instead of a transcript that grows forever. By the end you will have a working
+    memory that is the same size at token 10 as at token 10 million — and a clear view of the three
+    specific ways it breaks, which are the subject of the next three parts.
+  </p>
+
+  <p class="mb-6 text-gray-700">
+    You need to know what attention does. Everything else gets built here. The figures are live, so
+    drag them, and the dotted terms open short asides you can skip.
+  </p>
+
+  <section id="bill" class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">1. The bill comes due</h2>
+
+    <p class="text-sm text-gray-500 mb-4">
+      Dotted terms open a short aside. Everything in them is detail you can skip — the main line reads straight through.
+    </p>
+
+    <p class="text-gray-700 mb-3">
+      Softmax attention has a property that is easy to admire and expensive to keep: <b>it never
+      compresses anything</b>. To produce token <span class="font-mono text-sm">t+1</span> it needs the
+      key and value vectors of every earlier token, in full, unmodified. That is exactly why it is so
+      good at precise recall — nothing was thrown away — and it is also the entire problem, because
+      those vectors have to be
+      <span class="kn"><button type="button" class="kn-t">read</button><span class="kn-b"
+        ><span class="kn-p"><b>Read from where, exactly?</b></span
+        ><span class="kn-p">The cached keys and values sit in the GPU's <b>HBM</b> — the multi-gigabyte
+        pool <span class="m">nvidia-smi</span> reports. The arithmetic happens somewhere far smaller and
+        faster: the on-chip SRAM and registers of each streaming multiprocessor, tens of megabytes at
+        most.</span
+        ><span class="kn-p">So "read" means <b>copied out of HBM, across the memory bus, into on-chip
+        memory</b> — once per layer, and again for every token you generate, because there is nowhere
+        on-chip to keep a multi-gigabyte cache between steps.</span
+        ><span class="kn-p">Why it matters: on an H100 the arithmetic units can perform roughly <b>500
+        floating-point operations in the time it takes to fetch one number from HBM</b>. Whichever of the
+        two you need more of sets your speed.</span
+      ></span></span>
+      back for every single token generated.
+    </p>
+
+    <p class="text-gray-700 mb-3">
+      Attention is charged for twice, in two different currencies. Digesting the prompt costs
+      <span class="kn"><button type="button" class="kn-t">O(T²) of arithmetic, once</button><span class="kn-b"
+        ><span class="kn-p"><b>Prefill.</b> You have <span class="m">T</span> queries, and each attends to
+        up to <span class="m">T</span> keys, each comparison a <span class="m">d</span>-dimensional dot
+        product. That is <span class="m">T × T × d</span> multiply-adds, so
+        <span class="m">O(T²d)</span>.</span
+        ><span class="kn-p">It is <b>quadratic, and it is compute</b>. Every query is independent, so it
+        parallelises beautifully — you are simply buying a lot of arithmetic. Double the prompt,
+        quadruple the work.</span
+      ></span></span>;
+      generating each new token costs
+      <span class="kn"><button type="button" class="kn-t">O(T) of memory traffic, every time</button><span class="kn-b"
+        ><span class="kn-p"><b>Decoding.</b> Now there is exactly <em>one</em> query. It attends to
+        <span class="m">T</span> keys, so the arithmetic is only <span class="m">O(Td)</span> —
+        trivial.</span
+        ><span class="kn-p">But to do it you must fetch all <span class="m">T</span> keys and all
+        <span class="m">T</span> values out of HBM: <span class="m">2Td</span> numbers moved to perform
+        about <span class="m">2Td</span> operations. <b>Roughly one operation per number fetched</b>,
+        against hardware that wants five hundred. The units idle, waiting on memory.</span
+        ><span class="kn-p">So decoding is <b>bandwidth-bound and linear in T per token</b> — and
+        generating <span class="m">N</span> tokens drags <span class="m">O(N·T)</span> bytes across the
+        bus.</span
+      ></span></span>.
+      Long-context generation is not slow because the maths is hard. It is slow because the same
+      gigabytes get hauled through the same bus, over and over.
+    </p>
+
+    <p class="text-gray-700 mb-3">
+      And those gigabytes are not a figure of speech. For a 7B-class model in fp16,
+      <span class="kn"><button type="button" class="kn-t">a 2048-token context costs exactly 1 GiB</button><span class="kn-b"
+        ><span class="kn-p"><b>Count the numbers.</b> Two tensors — one key, one value — per token, per
+        layer, per key/value head:</span
+        ><span class="kn-eq">KV bytes = 2 · L · H<sub>kv</sub> · d<sub>h</sub> · T · p</span
+        ><span class="kn-legend"
+          ><span class="kn-hd">symbol</span><span class="kn-hd">what it is</span><span class="kn-hd">here</span
+          ><span class="kn-sym">2</span><span>one key <em>and</em> one value stored per token — the only constant in the formula</span><span class="kn-val">2</span
+          ><span class="kn-sym">L</span><span>layers that keep a cache. In a plain transformer that is every block</span><span class="kn-val">32</span
+          ><span class="kn-sym">H<sub>kv</sub></span><span>key/value heads per layer. Equals <span class="m">H</span> unless the model shares them</span><span class="kn-val">32</span
+          ><span class="kn-sym">H</span><span>query heads per layer. Does <em>not</em> enter the cache size — only <span class="m">H<sub>kv</sub></span> does</span><span class="kn-val">32</span
+          ><span class="kn-sym">d<sub>h</sub></span><span>width of one head, so <span class="m">H · d<sub>h</sub></span> = the model width (4096 here)</span><span class="kn-val">128</span
+          ><span class="kn-sym">T</span><span>tokens currently in the context — <b>the one that grows</b></span><span class="kn-val">2,048</span
+          ><span class="kn-sym">p</span><span>bytes per stored number, i.e. the precision</span><span class="kn-val">2</span
+        ></span
+        ><span class="kn-p">Those are not invented: for any model on the Hub they are
+        <span class="m">num_hidden_layers</span>, <span class="m">num_key_value_heads</span>,
+        <span class="m">num_attention_heads</span> and
+        <span class="m">hidden_size / num_attention_heads</span> in its
+        <span class="m">config.json</span>. Substituting the 7B shape above, in fp16, at
+        <span class="m">T</span> = 2048:</span
+        ><span class="kn-eq">2 × 32 × 4096 × 2048 × 2<br/>= 1,073,741,824 B = <b>1.000 GiB</b></span
+        ><span class="kn-p">Linear in <span class="m">T</span>, so 32K tokens costs 16 GiB and 128K costs
+        64 GiB — for a model whose <em>weights</em> are 13.5 GiB.</span
+        ><span class="kn-p"><b>p</b> is the one factor you can change without touching the architecture,
+        which is why quantised caches are everywhere:</span
+        ><span class="kn-tbl"
+          ><span class="kn-hd">Precision</span><span class="kn-hd">p</span><span class="kn-hd">2048 tokens</span
+          ><span>fp32</span><span>4</span><span>2.00 GiB</span
+          ><span>bf16 / fp16</span><span>2</span><span>1.00 GiB</span
+          ><span>fp8</span><span>1</span><span>0.50 GiB</span
+          ><span>int4</span><span>0.5</span><span>0.25 GiB</span
+        ></span
+        ><span class="kn-p" style="margin-top:8px">Note <span class="m">H<sub>kv</sub></span>, not
+        <span class="m">H</span>: that is <b>grouped-query attention</b>. Let several query heads share
+        one key/value head and the cache shrinks by exactly that ratio — Llama-3-70B uses 64 query heads
+        against 8 KV heads, turning 5.00 GiB into 0.62 GiB.</span
+      ></span></span>
+      of cache. Quantisation and head-sharing attack the constants in that formula, and they help a lot
+      in practice — but they leave the <span class="font-mono text-sm">T</span> exactly where it is. That
+      is the factor linear attention goes after.
+    </p>
+
+    <p class="text-gray-700 mb-3">
+      The rest of this post builds a mechanism whose memory is
+      <span class="kn"><button type="button" class="kn-t">a fixed-size matrix instead — 32 MiB whether the context is 2K or 2M</button><span class="kn-b"
+        ><span class="kn-p">The same count, for one <span class="m">d<sub>k</sub> × d<sub>v</sub></span>
+        state per head per layer. Note what is <em>missing</em>:</span
+        ><span class="kn-eq kn-eq-ok">state bytes = L · H · d<sub>k</sub> · d<sub>v</sub> · p&nbsp;&nbsp;<b>← no T</b><br/><br/>32 × 32 × 128 × 128 × 2<br/>= 33,554,432 B = <b>32 MiB</b></span
+        ><span class="kn-legend"
+          ><span class="kn-sym">L, H, p</span><span>as above — layers, heads per layer, bytes per number</span><span class="kn-val">32, 32, 2</span
+          ><span class="kn-sym">d<sub>k</sub></span><span>key width: the <em>rows</em> of the state matrix, one per key channel</span><span class="kn-val">128</span
+          ><span class="kn-sym">d<sub>v</sub></span><span>value width: the <em>columns</em>. So each head holds one <span class="m">d<sub>k</sub> × d<sub>v</sub></span> matrix</span><span class="kn-val">128</span
+        ></span
+        ><span class="kn-p">Setting the two formulas equal gives the crossover: below about <b>64
+        tokens</b> the fixed state is the <em>bigger</em> object. Above it, the KV cache runs away and
+        never comes back.</span
+      ></span></span>.
+      The figure below is just those two formulas with a slider on them.
+    </p>
+
+    <div data-widget="cache-growth"></div>
+  </section>
+
+
+  <section id="parentheses" class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">2. Why the softmax has to go</h2>
+
+    <p class="text-gray-700 mb-3">
+      We want a fixed-size summary instead of a growing cache. Here is what stands in the way. Attention
+      for one query, in full:
+    </p>
+
+    <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-sm md:text-base text-gray-900 overflow-x-auto">
+      O = softmax( Q Kᵀ / √d ) V
+    </div>
+
+    <p class="text-gray-700 mb-3">
+      Three matrices. And matrix multiplication is <em>associative</em> — normally you may bracket a
+      product any way you like and get the same answer. If we could compute
+      <span class="font-mono text-sm">Kᵀ V</span> first, we would never build the
+      <span class="font-mono text-sm">T×T</span> object at all; we would build a
+      <span class="font-mono text-sm">d×d</span> one that does not grow with the sequence. That
+      <span class="font-mono text-sm">d×d</span> object is exactly the fixed-size summary we are after.
+    </p>
+
+    <p class="text-gray-700 mb-3">
+      <b>The softmax is the one thing that forbids it.</b> It works
+      <span class="kn"><button type="button" class="kn-t">row by row across the whole T×T matrix</button><span class="kn-b"
+        ><span class="kn-p"><b>Why that blocks the regrouping.</b></span
+        ><span class="kn-p">Softmax turns a row of scores into weights that sum to 1 by dividing each by
+        the total:</span
+        ><span class="kn-eq">softmax(s)<sub>j</sub> = e<sup>s<sub>j</sub></sup> / Σ<sub>i</sub> e<sup>s<sub>i</sub></sup></span
+        ><span class="kn-p">Look at the denominator. To know <em>any single weight</em> you need the sum
+        over the entire row — every score that query produced against every key. So the row has to exist
+        before you can normalise it, and all <span class="m">T</span> rows make the
+        <span class="m">T×T</span> matrix.</span
+        ><span class="kn-p">That is what "non-linear" costs you here. A linear function
+        <span class="m">f</span> would satisfy <span class="m">f(QKᵀ)V = Q·f(KᵀV)</span>-style
+        rearrangement; <span class="m">exp</span> and the division do not commute with the matrix
+        product, so the brackets are frozen where they are.</span
+      ></span></span>,
+      so you cannot know a single attention weight without first computing that query's score against
+      every key. The <span class="font-mono text-sm">T×T</span> matrix is not an implementation choice —
+      the softmax <em>requires</em> it to exist. Which means the growing cache is not really attention's
+      fault. It is the softmax's.
+    </p>
+
+    <p class="text-gray-700 mb-3">
+      So the move is to take it out. Not because it is bad at its job — it is very good at its job — but
+      because it is the only thing between us and a memory that does not grow:
+    </p>
+
+    <div class="my-4 p-4 rounded border-2 border-blue-200 bg-blue-50 font-mono text-sm md:text-base text-gray-900 overflow-x-auto">
+      O = (Q Kᵀ) V &nbsp;&nbsp;&nbsp;⟶&nbsp;&nbsp;&nbsp; O = Q (Kᵀ V)
+      <span class="block mt-2 text-xs text-gray-600 font-sans">with nothing non-linear in between, the brackets are free to move</span>
+    </div>
+
+    <h3 class="text-xl md:text-2xl font-semibold mt-8 mb-2">But it was doing two jobs. Where did they go?</h3>
+
+    <p class="text-gray-700 mb-3">
+      This is the part I glossed over for far too long, and it matters, because deleting the softmax is
+      not free — it was earning its place.
+    </p>
+
+    <p class="text-gray-700 mb-3">
+      <b>Job one: keeping the output bounded.</b> Softmax weights are non-negative and sum to exactly 1,
+      so the output is a weighted <em>average</em> of value vectors — it can never be larger than the
+      largest value you put in. Delete it and you have a bare sum that grows as you add terms. That job
+      was <b>reassigned</b>, and
+      <span class="kn"><button type="button" class="kn-t">you can see exactly where in KDA</button><span class="kn-b"
+        ><span class="kn-p"><b>Normalisation moved out of the attention and around it.</b></span
+        ><span class="kn-p">The original linear attention (Katharopoulos et al., 2020) kept an explicit
+        denominator — it divided by <span class="m">φ(q)ᵀ Σ φ(k)</span> to restore the average. Modern
+        variants dropped that and use norms instead. In KDA, from <a href="/blog/delta-rule#overwriting" class="text-blue-700 hover:underline">part 2</a> of the paper:</span
+        ><span class="kn-eq">q, k = <b>L2Norm</b>(Swish(ShortConv(W x)))<br/>o&nbsp;&nbsp;&nbsp; = W<sub>o</sub>( gate ⊙ <b>RMSNorm</b>( attention output ) )</span
+        ><span class="kn-p"><b>L2Norm</b> on <span class="m">q</span> and <span class="m">k</span> forces
+        every score to be a cosine in <span class="m">[−1, 1]</span>, so no single comparison can be
+        huge. <b>RMSNorm</b> on the way out rescales whatever the state produced. And the decay gate that
+        arrives in <a href="/blog/gated-deltanet" class="text-blue-700 hover:underline">part 3</a> stops the state itself from accumulating without limit.</span
+        ><span class="kn-p">Three bounded things in place of one. The paper's Table 6 quietly admits this
+        by noting it "omitted the normalization term" to keep the equations readable — the norms are
+        there in the real layer.</span
+      ></span></span>.
+    </p>
+
+    <p class="text-gray-700 mb-3">
+      <b>Job two: sharpening.</b> The <span class="font-mono text-sm">exp</span> in softmax is
+      <em>exponential</em>: a score of 8 against a score of 6 does not get 8/6 of the weight, it gets
+      about 7× the weight. That turns a soft weighted average into something close to a
+      <b>hard lookup of the single best-matching key</b> — which is precisely what makes attention so
+      good at fishing one exact fact out of a long context.
+    </p>
+
+    <div class="my-5 p-4 rounded border-l-4 border-amber-400 bg-amber-50 text-gray-800">
+      <b>That job was not reassigned. It was given up.</b> Nothing in linear attention sharpens; every
+      stored pair contributes in proportion to its raw key overlap, forever. This is not a detail — it is
+      the root of the crowding in <a href="/blog/delta-rule#crowding" class="text-blue-700 hover:underline">part 2</a>, the reason a fixed-size memory blurs facts together, and ultimately
+      why Kimi Linear keeps one real attention layer in every four rather than going fully linear. When
+      you read <a href="/blog/kda#results" class="text-blue-700 hover:underline">part 4</a> and see full attention winning on precise recall, this paragraph is why.
+    </div>
+
+    <h3 class="text-xl md:text-2xl font-semibold mt-8 mb-2">Now the algebra</h3>
+
+    <p class="text-gray-700 mb-3">
+      With the softmax gone, one query's output is just a weighted sum with unnormalised weights:
+      <span class="font-mono text-sm">o<sub>t</sub> = Σ<sub>j≤t</sub> (q<sub>t</sub>·k<sub>j</sub>) v<sub>j</sub></span>.
+      Three lines rearrange that into a state —
+      <span class="kn"><button type="button" class="kn-t">the sum moves inside the brackets</button><span class="kn-b"
+        ><span class="kn-p"><span class="m">q<sub>t</sub>·k<sub>j</sub></span> is a <em>scalar</em>, so it
+        can be slid around freely:</span
+        ><span class="kn-eq">o<sub>t</sub> = Σ<sub>j</sub> (q<sub>t</sub>ᵀk<sub>j</sub>) v<sub>j</sub><br/>
+        &nbsp;&nbsp;&nbsp;&nbsp;= Σ<sub>j</sub> v<sub>j</sub> (k<sub>j</sub>ᵀq<sub>t</sub>)<br/>
+        &nbsp;&nbsp;&nbsp;&nbsp;= ( Σ<sub>j</sub> v<sub>j</sub>k<sub>j</sub>ᵀ ) q<sub>t</sub></span
+        ><span class="kn-p">The last step is the whole trick: <span class="m">q<sub>t</sub></span> is the
+        same in every term, so it factors out — and the sum over past tokens ends up
+        <em>inside</em> the brackets, where it no longer involves the query at all.</span
+        ><span class="kn-p">In attention you compare against every key and then combine. Here you combine
+        all the keys and values first, once, and compare a single time at the end.</span
+      ></span></span>:
+    </p>
+
+    <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-sm md:text-base text-gray-900 overflow-x-auto">
+      S<sub>t</sub> = S<sub>t−1</sub> + k<sub>t</sub> v<sub>t</sub>ᵀ &nbsp;&nbsp;&nbsp;&nbsp; o<sub>t</sub> = S<sub>t</sub>ᵀ q<sub>t</sub>
+    </div>
+
+    <p class="text-gray-700 mb-3">
+      The causal mask did not disappear either — it <b>became "the running total so far"</b>. And the KV
+      cache is gone: in its place is one matrix per head, the same size at token 10 as at token 10
+      million. This is <b>linear attention</b> (Katharopoulos et al., 2020).
+    </p>
+
+    <div data-widget="associativity"></div>
+
+    <p class="text-gray-700 mb-3">
+      Note the crossover in that figure: below roughly <span class="font-mono text-sm">T ≈ 3d</span>,
+      quadratic attention is the <em>cheaper</em> option. Linear attention is not a free lunch, it is a
+      different asymptote — one you only start collecting on at long context.
+    </p>
+  </section>
+
+  <!-- ============================================================ 3 -->
+
+  <section id="memory" class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">3. That state is a lookup table</h2>
+    <p class="text-gray-700 mb-3">
+      Before anything goes wrong, let's be concrete about what <span class="font-mono text-sm">S</span>
+      <em>is</em>. Take a two-dimensional example and write two pairs into it:
+    </p>
+
+    <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-sm text-gray-900 overflow-x-auto">
+      k₁ = [1, 0]&nbsp;&nbsp;&nbsp;v₁ = [5, 0]<br/>
+      k₂ = [0, 1]&nbsp;&nbsp;&nbsp;v₂ = [0, 7]<br/><br/>
+      S = k₁v₁ᵀ + k₂v₂ᵀ = [[5, 0],&nbsp;&nbsp;+&nbsp;&nbsp;[[0, 0],&nbsp;&nbsp;=&nbsp;&nbsp;[[5, 0],<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[0, 0]]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[0, 7]]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[0, 7]]
+    </div>
+
+    <p class="text-gray-700 mb-3">
+      Now read it back with <span class="font-mono text-sm">q = k₁</span>:
+    </p>
+
+    <div class="my-4 p-4 rounded border-2 border-green-200 bg-green-50 font-mono text-sm text-gray-900 overflow-x-auto">
+      Sᵀq = [5, 0] = v₁ &nbsp;&nbsp;&nbsp;<span class="font-sans text-green-800">exactly what was stored</span>
+    </div>
+
+    <p class="text-gray-700 mb-3">
+      So <b>S is a lookup table built by addition</b>. Writing is "add an outer product"; reading is
+      "multiply by a key". That is the whole mechanism, and it is the object every remaining idea in
+      this post modifies.
+    </p>
+    <p class="text-gray-700 mb-3">
+      It worked perfectly there for one reason: <span class="font-mono text-sm">k₁</span> and
+      <span class="font-mono text-sm">k₂</span> are perpendicular. Take that away and things break —
+      in <em>two separate ways</em> that are worth keeping apart, because they have different fixes
+      and only one of them is the delta rule's.
+    </p>
+  </section>
+
+
+  <section id="three-problems" class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">4. Three ways this breaks</h2>
+    <p class="text-gray-700 mb-3">
+      That lookup table worked perfectly for one reason: <span class="font-mono text-sm">k₁</span> and
+      <span class="font-mono text-sm">k₂</span> were perpendicular. Take that away and it breaks — in
+      three separate ways that are worth keeping strictly apart, because they have three different
+      fixes and only one of them is the famous one.
+    </p>
+    <div class="overflow-x-auto my-4">
+      <table class="w-full text-sm border-collapse">
+        <thead><tr class="border-b-2 border-gray-300 text-left">
+          <th class="py-2 pr-4 font-semibold">Problem</th>
+          <th class="py-2 pr-4 font-semibold">What goes wrong</th>
+          <th class="py-2 font-semibold">What fixes it</th>
+        </tr></thead>
+        <tbody>
+          <tr class="border-b border-gray-200"><td class="py-2 pr-4 font-semibold">Overwriting</td><td class="pr-4">re-writing a key adds to it instead of replacing</td><td>the delta rule — completely (part 2)</td></tr>
+          <tr class="border-b border-gray-200"><td class="py-2 pr-4 font-semibold">Crowding</td><td class="pr-4">more keys than the state has perpendicular directions</td><td>nothing but a bigger state (part 2)</td></tr>
+          <tr class="bg-blue-50"><td class="py-2 pr-4 font-semibold">Staleness</td><td class="pr-4">facts from long ago still hold capacity</td><td class="font-semibold">the gate (parts 3 and 4)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-gray-700 mb-3">
+      Keeping them apart matters more than it sounds. I originally wrote that the delta rule fixes the
+      second one. It does not, and believing it did hid what the gate is actually for.
+    </p>
+  </section>
+
+  <section class="mt-12 rounded-lg border border-blue-200 bg-blue-50 p-4">
+    <p class="text-sm text-gray-600 mb-1">Next in the series</p>
+    <p class="text-lg font-semibold mb-1"><a href="/blog/delta-rule" class="text-blue-700 hover:underline">Part 2 — The delta rule</a></p>
+    <p class="text-sm text-gray-700">Writing to the same key twice adds instead of replacing. One change to the update rule fixes that exactly — and does nothing at all for crowding, which is worth being precise about.</p>
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-2xl md:text-3xl font-bold mb-3">References</h2>
+    <ul class="text-gray-700 text-sm space-y-1 list-disc list-inside">
+      <li>Kimi Team. <a href="https://arxiv.org/abs/2510.26692" class="text-blue-700 hover:underline">Kimi Linear: An Expressive, Efficient Attention Architecture</a>, arXiv:2510.26692, 2025.</li>
+      <li>Katharopoulos et al. <i>Transformers are RNNs</i>, ICML 2020 — linear attention.</li>
+      <li>Schlag et al. <i>Linear Transformers Are Secretly Fast Weight Programmers</i>, ICML 2021 — the delta rule.</li>
+      <li>Yang et al. <i>Gated Linear Attention</i>, ICML 2024 — the per-channel gate.</li>
+      <li>Yang et al. <i>Gated Delta Networks</i>, ICLR 2025 — the model KDA refines.</li>
+      <li>Dao &amp; Gu. <i>Mamba-2 / State Space Duality</i>, ICML 2024.</li>
+      <li><a href="https://github.com/fla-org/flash-linear-attention" class="text-blue-700 hover:underline">flash-linear-attention</a> — the reference KDA kernels.</li>
+      <li><a href="https://github.com/eitamar-saraf/kda" class="text-blue-700 hover:underline">eitamar-saraf/kda</a> — the implementation and experiments behind this series.</li>
+    </ul>
+  </section>
+
+  <script type="module" src="/kimi-linear/widgets.js"></script>
+  <script type="module" src="/kimi-linear/notes.js"></script>
+</BlogPostLayout>

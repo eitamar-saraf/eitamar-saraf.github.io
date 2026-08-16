@@ -1,0 +1,183 @@
+---
+import BlogPostLayout from '../../layouts/BlogPostLayout.astro';
+import SeriesNav from '../../components/SeriesNav.astro';
+
+export const frontmatter = {
+  title: 'The delta rule',
+  pubDate: '2026-08-16',
+  description: 'Re-writing a key should replace its value, not add to it. One change to the update rule fixes that exactly — and does nothing for crowding.',
+};
+---
+
+<BlogPostLayout frontmatter={frontmatter}>
+  <SeriesNav current="delta-rule" />
+
+  <p class="mb-6 text-gray-700">
+    <a href="/blog/linear-attention" class="text-blue-700 hover:underline">Part 1</a> built a
+    fixed-size memory: one matrix <span class="font-mono text-sm">S</span>, written with an outer
+    product and read by multiplying with a key. It also ended with three specific ways that memory
+    breaks. This part is about the first two, and about the update rule that fixes one of them.
+  </p>
+
+  <div class="mb-6 p-4 rounded border bg-gray-50 text-gray-700 text-sm">
+    <b>Where we are.</b> Plain linear attention keeps
+    <span class="font-mono">S<sub>t</sub> = S<sub>t−1</sub> + k<sub>t</sub>v<sub>t</sub>ᵀ</span> and reads
+    it with <span class="font-mono">o<sub>t</sub> = S<sub>t</sub>ᵀq<sub>t</sub></span>. Writing is
+    addition; reading is a matrix-vector product. That is the whole mechanism, and everything below
+    modifies it.
+  </div>
+
+  <section id="overwriting" class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">1. Problem one: writing twice adds instead of replaces</h2>
+    <p class="text-gray-700 mb-3">
+      Write <span class="font-mono text-sm">(k, v₁)</span>, then later write
+      <span class="font-mono text-sm">(k, v₂)</span> — the same key, a new value. The state is a sum,
+      and a sum has no notion of replacing, so it holds both:
+    </p>
+
+    <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-sm text-gray-900 overflow-x-auto">
+      S = k v₁ᵀ + k v₂ᵀ &nbsp;&nbsp;⟹&nbsp;&nbsp; Sᵀk = v₁ + v₂ &nbsp;&nbsp;&nbsp;<span class="font-sans text-gray-500">(for a unit-length k)</span>
+    </div>
+
+    <p class="text-gray-700 mb-3">
+      You asked for the current value and got the sum of every value that key has ever held. Write it
+      eight times and you get all eight added together.
+    </p>
+
+    <div data-widget="overwrite"></div>
+
+    <h3 class="text-xl md:text-2xl font-semibold mt-8 mb-2">The fix: write the error, not the value</h3>
+    <p class="text-gray-700 mb-3">
+      Before writing, ask the memory what it already answers for this key. Then write only the
+      <em>difference</em>:
+    </p>
+
+    <div class="my-4 p-4 rounded border-2 border-blue-200 bg-blue-50 font-mono text-sm md:text-base text-gray-900 overflow-x-auto">
+      S<sub>t</sub> = S<sub>t−1</sub> + β<sub>t</sub> k<sub>t</sub> ( v<sub>t</sub> − S<sub>t−1</sub>ᵀk<sub>t</sub> )ᵀ
+      <span class="block mt-2 text-xs text-gray-600 font-sans">the delta rule — the parenthesis is the error between what's stored and what you meant to store</span>
+    </div>
+
+    <p class="text-gray-700 mb-3">
+      Work the same example: the memory already answers <span class="font-mono text-sm">v₁</span>, you
+      want <span class="font-mono text-sm">v₂</span>, so you write
+      <span class="font-mono text-sm">v₂ − v₁</span>. Total stored:
+      <span class="font-mono text-sm">v₁ + (v₂ − v₁) = v₂</span>. The old value is gone. Toggle the
+      figure above and the error drops to zero and <em>stays</em> there however many times you write.
+    </p>
+
+    <details class="not-prose my-5 rounded border border-gray-200 bg-gray-50">
+      <summary class="cursor-pointer px-4 py-2.5 text-sm font-medium text-blue-700 hover:bg-gray-100 select-none">Show why this is gradient descent</summary>
+      <div class="px-4 pb-4 pt-1 text-sm text-gray-700 space-y-2">
+        <p>Treat the state as a little model being fitted during the forward pass. A sensible thing to want is that querying with <span class="font-mono">k<sub>t</sub></span> returns <span class="font-mono">v<sub>t</sub></span>, so score it by squared error:</p>
+        <p class="font-mono text-xs md:text-sm bg-white rounded border p-3">ℒ<sub>t</sub>(S) = ½ ‖ Sᵀk<sub>t</sub> − v<sub>t</sub> ‖²</p>
+        <p>Differentiate with respect to <span class="font-mono">S</span>. The gradient of a squared error is (input) × (error)ᵀ:</p>
+        <p class="font-mono text-xs md:text-sm bg-white rounded border p-3">∇<sub>S</sub> ℒ<sub>t</sub> = k<sub>t</sub> ( Sᵀk<sub>t</sub> − v<sub>t</sub> )ᵀ</p>
+        <p>Take one gradient step, <span class="font-mono">S ← S − β ∇</span>:</p>
+        <p class="font-mono text-xs md:text-sm bg-white rounded border p-3">S<sub>t</sub> = S<sub>t−1</sub> − β<sub>t</sub> k<sub>t</sub>( S<sub>t−1</sub>ᵀk<sub>t</sub> − v<sub>t</sub> )ᵀ = S<sub>t−1</sub> + β<sub>t</sub> k<sub>t</sub>( v<sub>t</sub> − S<sub>t−1</sub>ᵀk<sub>t</sub> )ᵀ</p>
+        <p>Which is the delta rule exactly. So <span class="font-mono">β<sub>t</sub></span> is not a coefficient someone chose for tidiness — it is a <b>learning rate</b>, and the layer is running one step of SGD per token. Expanding the bracket gives the form the paper writes, <span class="font-mono">(I − β<sub>t</sub>k<sub>t</sub>k<sub>t</sub>ᵀ)S<sub>t−1</sub> + β<sub>t</sub>k<sub>t</sub>v<sub>t</sub>ᵀ</span>.</p>
+      </div>
+    </details>
+
+    <div data-widget="beta"></div>
+  </section>
+
+
+  <section id="crowding" class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">2. Problem two: too many keys, and this one has no fix</h2>
+    <p class="text-gray-700 mb-3">
+      Now every key is <em>different</em>, and none are perpendicular. Read one back and you get what
+      you stored plus a share of everything else:
+    </p>
+
+    <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-sm text-gray-900 overflow-x-auto">
+      Sᵀk<sub>j</sub> = v<sub>j</sub> &nbsp;+&nbsp; Σ<sub>i≠j</sub> (k<sub>i</sub>·k<sub>j</sub>) v<sub>i</sub><br/>
+      <span class="text-gray-500 font-sans text-xs">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;what you wanted&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;everything else, weighted by key overlap</span>
+    </div>
+
+    <p class="text-gray-700 mb-3">
+      Concretely, with <span class="font-mono text-sm">k₁ = [1, 0]</span> and a second key tilted to
+      <span class="font-mono text-sm">k₂ = [0.8, 0.6]</span>:
+    </p>
+
+    <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-sm text-gray-900 overflow-x-auto">
+      Sᵀk₁ = [5, 0] + 0.8·[0, 7] = [5, <span class="text-orange-600 font-bold">5.6</span>]<br/>
+      <span class="text-gray-500 font-sans text-xs">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;wanted v₁ = [5, 0]; the 5.6 is k₂'s value bleeding through, scaled by the 0.8 overlap</span>
+    </div>
+
+    <p class="text-gray-700 mb-3">
+      The leak vanishes only when the keys are mutually perpendicular, and a
+      <span class="font-mono text-sm">d</span>-dimensional space has only
+      <span class="font-mono text-sm">d</span> perpendicular directions. Past
+      <span class="font-mono text-sm">d</span> keys, no arrangement avoids it.
+    </p>
+
+    <div class="my-5 p-4 rounded border-l-4 border-amber-400 bg-amber-50 text-gray-800">
+      <b>The delta rule does not fix this one</b>, and I originally wrote that it did. It corrects each
+      key in turn, but correcting a later key disturbs an earlier one whenever the two keys overlap — so
+      in a single pass it is no better than plain addition, and sometimes slightly worse. What it does
+      buy is a <em>ceiling</em>: as you overload the memory, plain error keeps climbing while the delta
+      rule's flattens. Crowding is not a defect in the update rule. It is what a fixed-size state costs,
+      and only more dimensions buy more room.
+    </div>
+
+    <div data-widget="crowding"></div>
+
+    <p class="text-gray-700 mb-3">
+      So there are <b>three</b> distinct things that go wrong with a fixed-size memory, and it is worth
+      holding them apart — because the rest of this post is three different fixes:
+    </p>
+
+    <div class="overflow-x-auto my-4">
+      <table class="w-full text-sm border-collapse">
+        <thead><tr class="border-b-2 border-gray-300 text-left">
+          <th class="py-2 pr-4 font-semibold">Problem</th>
+          <th class="py-2 pr-4 font-semibold">What goes wrong</th>
+          <th class="py-2 font-semibold">What fixes it</th>
+        </tr></thead>
+        <tbody>
+          <tr class="border-b border-gray-200"><td class="py-2 pr-4 font-semibold">Overwriting</td><td class="pr-4">re-writing a key adds to it instead of replacing</td><td>the delta rule — completely</td></tr>
+          <tr class="border-b border-gray-200"><td class="py-2 pr-4 font-semibold">Crowding</td><td class="pr-4">more keys than the state has perpendicular directions</td><td>nothing but a bigger state</td></tr>
+          <tr class="bg-blue-50"><td class="py-2 pr-4 font-semibold">Staleness</td><td class="pr-4">facts from long ago still hold capacity</td><td class="font-semibold">the gate — and this is where KDA lives</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="wrong" class="mt-12">
+    <h2 class="text-2xl md:text-3xl font-bold mb-3">What I got wrong here</h2>
+    <p class="text-gray-700 mb-3">
+      <b>1. I asserted the wrong mechanism, in public.</b> An earlier version of this post claimed the
+      delta rule fixes the crowding in <a href="/blog/delta-rule#crowding" class="text-blue-700 hover:underline">part 2</a> — and the figure beside that claim was, at the time, printing
+      numbers that contradicted it (0.51 with the delta rule against 0.45 without). A reader who knows
+      decoder architectures told me the post lost him, I went back to check the step he was stuck on,
+      and found this instead. The cause was the same as the symptom he reported: I compressed three
+      separate failures into one sentence, and the physics did not survive the compression. What the
+      delta rule actually fixes is <em>overwriting</em>, exactly and completely; crowding is the price of
+      a fixed-size state and only more dimensions buy it down. <a href="/blog/delta-rule#overwriting" class="text-blue-700 hover:underline">part 2</a> and <a href="/blog/delta-rule#crowding" class="text-blue-700 hover:underline">part 2</a> are now the corrected version,
+      and the figures are two rather than one.
+    </p>
+  </section>
+
+  <section class="mt-12 rounded-lg border border-blue-200 bg-blue-50 p-4">
+    <p class="text-sm text-gray-600 mb-1">Next in the series</p>
+    <p class="text-lg font-semibold mb-1"><a href="/blog/gated-deltanet" class="text-blue-700 hover:underline">Part 3 — Teaching it to forget</a></p>
+    <p class="text-sm text-gray-700">The delta rule stops keys corrupting each other, but nothing ever fades. A fact written at token 5 still occupies capacity at token 500,000.</p>
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-2xl md:text-3xl font-bold mb-3">References</h2>
+    <ul class="text-gray-700 text-sm space-y-1 list-disc list-inside">
+      <li>Kimi Team. <a href="https://arxiv.org/abs/2510.26692" class="text-blue-700 hover:underline">Kimi Linear: An Expressive, Efficient Attention Architecture</a>, arXiv:2510.26692, 2025.</li>
+      <li>Katharopoulos et al. <i>Transformers are RNNs</i>, ICML 2020 — linear attention.</li>
+      <li>Schlag et al. <i>Linear Transformers Are Secretly Fast Weight Programmers</i>, ICML 2021 — the delta rule.</li>
+      <li>Yang et al. <i>Gated Linear Attention</i>, ICML 2024 — the per-channel gate.</li>
+      <li>Yang et al. <i>Gated Delta Networks</i>, ICLR 2025 — the model KDA refines.</li>
+      <li>Dao &amp; Gu. <i>Mamba-2 / State Space Duality</i>, ICML 2024.</li>
+      <li><a href="https://github.com/fla-org/flash-linear-attention" class="text-blue-700 hover:underline">flash-linear-attention</a> — the reference KDA kernels.</li>
+      <li><a href="https://github.com/eitamar-saraf/kda" class="text-blue-700 hover:underline">eitamar-saraf/kda</a> — the implementation and experiments behind this series.</li>
+    </ul>
+  </section>
+
+  <script type="module" src="/kimi-linear/widgets.js"></script>
+  <script type="module" src="/kimi-linear/notes.js"></script>
+</BlogPostLayout>

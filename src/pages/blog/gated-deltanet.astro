@@ -1,0 +1,108 @@
+---
+import BlogPostLayout from '../../layouts/BlogPostLayout.astro';
+import SeriesNav from '../../components/SeriesNav.astro';
+
+export const frontmatter = {
+  title: 'Teaching it to forget',
+  pubDate: '2026-08-16',
+  description: 'A memory that never forgets fills up. Gated DeltaNet adds a decay — one number per head — and that single number is what KDA later takes issue with.',
+};
+---
+
+<BlogPostLayout frontmatter={frontmatter}>
+  <SeriesNav current="gated-deltanet" />
+
+  <p class="mb-6 text-gray-700">
+    <a href="/blog/delta-rule" class="text-blue-700 hover:underline">Part 2</a> fixed overwriting: the
+    delta rule writes the error rather than the value, so re-writing a key replaces it exactly. It also
+    established that crowding has no fix short of a bigger state. That leaves the third failure, and it
+    is the one the rest of this series is really about.
+  </p>
+
+  <div class="mb-6 p-4 rounded border bg-gray-50 text-gray-700 text-sm">
+    <b>Where we are.</b>
+    <span class="font-mono">S<sub>t</sub> = S<sub>t−1</sub> + β<sub>t</sub>k<sub>t</sub>(v<sub>t</sub> − S<sub>t−1</sub>ᵀk<sub>t</sub>)ᵀ</span>
+    — a fixed-size memory that corrects itself when you re-write a key. It never forgets anything,
+    which is about to be the problem.
+  </div>
+
+  <section id="forgetting" class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">1. Never forgetting is its own problem</h2>
+    <p class="text-gray-700 mb-3">
+      The delta rule stops keys from corrupting each other, but it still never forgets. A fact written
+      at token 5 is as vivid at token 500,000 as the day it arrived, competing for the same finite
+      capacity. <b>Gated DeltaNet</b> adds a decay
+      <span class="font-mono text-sm">α<sub>t</sub> ∈ [0,1]</span> — weight decay on the
+      <span class="kn"><button type="button" class="kn-t">fast weights</button><span class="kn-b"
+        ><span class="kn-p"><b>Two sets of weights, on two timescales.</b></span
+        ><span class="kn-p">The ordinary weights — the projections, the MLPs — are learned by gradient
+        descent over the whole training run and then frozen. Call those the <em>slow</em> weights.</span
+        ><span class="kn-p">The state <span class="m">S</span> is also a matrix that gets multiplied by
+        an input to produce an output, which makes it a weight matrix too — except it is written during
+        the forward pass, one update per token, and thrown away at the end of the sequence. Those are
+        the <b>fast weights</b> (Schmidhuber, 1992; Schlag et al., 2021).</span
+        ><span class="kn-p">It is a useful frame because it makes "weight decay" mean exactly what it
+        normally means: shrink the weights a little at every step so old contributions fade.</span
+      ></span></span>:
+    </p>
+
+    <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-sm md:text-base text-gray-900 overflow-x-auto">
+      S<sub>t</sub> = (I − β<sub>t</sub> k<sub>t</sub> k<sub>t</sub>ᵀ) <b>α<sub>t</sub></b> S<sub>t−1</sub> + β<sub>t</sub> k<sub>t</sub> v<sub>t</sub>ᵀ
+    </div>
+
+    <p class="text-gray-700 mb-3">
+      Now the model can choose a memory lifespan. But look closely at what
+      <span class="font-mono text-sm">α<sub>t</sub></span> is: <b>one number per head, per step</b>.
+      It multiplies the entire state. Everything the head knows fades at the same rate, whether it is
+      the subject of the sentence or a stray comma.
+    </p>
+  </section>
+
+
+  <section id="wrong" class="mt-12">
+    <h2 class="text-2xl md:text-3xl font-bold mb-3">What I got wrong here</h2>
+    <p class="text-gray-700 mb-3">Two of my five mistakes in this whole project were about
+    this one parameter, which is a fair signal of how load-bearing it is.</p>
+    <p class="text-gray-700 mb-3">
+      <b>1. A zero bias that erases the memory.</b> The decay is
+      <span class="font-mono text-sm">log α = −exp(A) · softplus(·)</span>. Initialising that
+      projection's bias to zero gives <span class="font-mono text-sm">softplus(0) = 0.69</span>, and with
+      <span class="font-mono text-sm">exp(A)</span> up to 16 that is a decay of
+      <span class="font-mono text-sm">e⁻¹¹</span> <em>per token</em>. The state was being wiped between
+      writing a fact and reading it. The loss sat at exactly <span class="font-mono text-sm">ln(vocab)</span> —
+      not "learning slowly", but pinned at chance forever, because once the signal is destroyed there is
+      no gradient left to tell the gate to stop destroying it.
+    </p>
+    <p class="text-gray-700 mb-3">
+      <b>2. The decay initialisation silently decides the result.</b> Even with Mamba's standard
+      <span class="font-mono text-sm">dt ∈ [10⁻³, 10⁻¹]</span>, the same model scored <b>1.00 on MQAR at
+      T = 512 and 0.37 at T = 1024</b>. Not capacity — at T = 1024 it still solved four pairs perfectly.
+      Purely the initialisation: no channel started with a memory timescale long enough to reach the
+      query. Anyone comparing gated architectures without scaling this to their context length is
+      partly measuring who got a luckier init.
+    </p>
+  </section>
+
+  <section class="mt-12 rounded-lg border border-blue-200 bg-blue-50 p-4">
+    <p class="text-sm text-gray-600 mb-1">Next in the series</p>
+    <p class="text-lg font-semibold mb-1"><a href="/blog/kda" class="text-blue-700 hover:underline">Part 4 — Kimi Delta Attention</a></p>
+    <p class="text-sm text-gray-700">One forgetting rate for a whole head is a blunt instrument. KDA gives every channel its own — that is the entire change, and everything the paper claims follows from it.</p>
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-2xl md:text-3xl font-bold mb-3">References</h2>
+    <ul class="text-gray-700 text-sm space-y-1 list-disc list-inside">
+      <li>Kimi Team. <a href="https://arxiv.org/abs/2510.26692" class="text-blue-700 hover:underline">Kimi Linear: An Expressive, Efficient Attention Architecture</a>, arXiv:2510.26692, 2025.</li>
+      <li>Katharopoulos et al. <i>Transformers are RNNs</i>, ICML 2020 — linear attention.</li>
+      <li>Schlag et al. <i>Linear Transformers Are Secretly Fast Weight Programmers</i>, ICML 2021 — the delta rule.</li>
+      <li>Yang et al. <i>Gated Linear Attention</i>, ICML 2024 — the per-channel gate.</li>
+      <li>Yang et al. <i>Gated Delta Networks</i>, ICLR 2025 — the model KDA refines.</li>
+      <li>Dao &amp; Gu. <i>Mamba-2 / State Space Duality</i>, ICML 2024.</li>
+      <li><a href="https://github.com/fla-org/flash-linear-attention" class="text-blue-700 hover:underline">flash-linear-attention</a> — the reference KDA kernels.</li>
+      <li><a href="https://github.com/eitamar-saraf/kda" class="text-blue-700 hover:underline">eitamar-saraf/kda</a> — the implementation and experiments behind this series.</li>
+    </ul>
+  </section>
+
+  <script type="module" src="/kimi-linear/widgets.js"></script>
+  <script type="module" src="/kimi-linear/notes.js"></script>
+</BlogPostLayout>

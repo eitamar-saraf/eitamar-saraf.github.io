@@ -1,0 +1,383 @@
+---
+import BlogPostLayout from '../../layouts/BlogPostLayout.astro';
+import SeriesNav from '../../components/SeriesNav.astro';
+
+export const frontmatter = {
+  title: 'Kimi Delta Attention',
+  pubDate: '2026-08-16',
+  description: 'One decay rate per head becomes one per channel. That single change is the paper\'s contribution — here is what it buys, and what happened when I trained it.',
+};
+---
+
+<BlogPostLayout frontmatter={frontmatter}>
+  <SeriesNav current="kda" />
+
+  <p class="mb-6 text-gray-700">
+    Three parts of setup, and here is the payoff. <a href="/blog/linear-attention" class="text-blue-700 hover:underline">Part 1</a>
+    built a fixed-size memory, <a href="/blog/delta-rule" class="text-blue-700 hover:underline">part 2</a>
+    made it correct itself when a key is re-written, and <a href="/blog/gated-deltanet" class="text-blue-700 hover:underline">part 3</a>
+    gave it a way to forget — one decay rate per head.
+  </p>
+
+  <p class="mb-6 text-gray-700">
+    <b>Kimi Delta Attention changes exactly one thing about that.</b> The decay stops being a number and
+    becomes a vector: one rate per channel instead of one per head. This part is what that buys, why it
+    also turns the decay into a learned positional encoding, how the whole thing is made to run on a
+    GPU — and what happened when I trained it on two RTX 3090s, including the parts that did not
+    reproduce.
+  </p>
+
+  <div class="mb-6 p-4 rounded border bg-blue-50 text-blue-900 text-sm">
+    <b>Scope.</b> This part is about the KDA mechanism only. The architecture built around it — the 3:1
+    interleave with full attention, NoPE, and the pretraining results — is
+    <a href="/blog/kimi-linear" class="text-blue-700 hover:underline">part 6</a>.
+  </div>
+
+  <section id="kda" class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">1. One dial per channel</h2>
+    <p class="text-gray-700 mb-3">
+      Here is the paper's contribution, in full:
+    </p>
+
+    <div class="my-4 p-4 rounded border-2 border-blue-200 bg-blue-50 font-mono text-sm md:text-base text-gray-900 overflow-x-auto">
+      S<sub>t</sub> = (I − β<sub>t</sub> k<sub>t</sub> k<sub>t</sub>ᵀ) <b class="text-blue-700">Diag(α<sub>t</sub>)</b> S<sub>t−1</sub> + β<sub>t</sub> k<sub>t</sub> v<sub>t</sub>ᵀ
+      <span class="block mt-2 text-xs text-gray-500 font-sans">Kimi Delta Attention, Eq. 1 — α<sub>t</sub> is now a vector, one entry per key channel</span>
+    </div>
+
+    <p class="text-gray-700 mb-3">
+      The scalar became a diagonal matrix. Instead of one forgetting rate per head there are 128 — one
+      per channel of the state — each computed from the current token. The head can hold a name in
+      some channels while letting punctuation wash through others.
+    </p>
+
+    <div data-widget="gate-granularity"></div>
+
+    <p class="text-gray-700 mb-3">
+      What makes this satisfying is how little of the surrounding machinery it disturbs. Take one
+      recurrence, give it two switches — <em>how fine-grained is the decay</em> and <em>does the write
+      correct itself</em> — and six named architectures fall out as settings:
+    </p>
+
+    <div class="overflow-x-auto my-5">
+      <table class="w-full text-sm border-collapse">
+        <thead>
+          <tr class="border-b-2 border-gray-300 text-left">
+            <th class="py-2 pr-4 font-semibold">Decay</th>
+            <th class="py-2 pr-4 font-semibold">Delta rule</th>
+            <th class="py-2 pr-4 font-semibold">Update</th>
+            <th class="py-2 font-semibold">Is</th>
+          </tr>
+        </thead>
+        <tbody class="font-mono text-xs md:text-sm">
+          <tr class="border-b border-gray-200"><td class="py-2 pr-4">none</td><td class="pr-4">off</td><td class="pr-4">S + k vᵀ</td><td class="font-sans">Linear Attention</td></tr>
+          <tr class="border-b border-gray-200"><td class="py-2 pr-4">scalar</td><td class="pr-4">off</td><td class="pr-4">α S + β k vᵀ</td><td class="font-sans">Mamba2</td></tr>
+          <tr class="border-b border-gray-200"><td class="py-2 pr-4">channel</td><td class="pr-4">off</td><td class="pr-4">Diag(α) S + k vᵀ</td><td class="font-sans">GLA</td></tr>
+          <tr class="border-b border-gray-200"><td class="py-2 pr-4">none</td><td class="pr-4">on</td><td class="pr-4">(I − βkkᵀ) S + β k vᵀ</td><td class="font-sans">DeltaNet</td></tr>
+          <tr class="border-b border-gray-200"><td class="py-2 pr-4">scalar</td><td class="pr-4">on</td><td class="pr-4">(I − βkkᵀ) α S + β k vᵀ</td><td class="font-sans">Gated DeltaNet</td></tr>
+          <tr class="bg-blue-50 font-semibold"><td class="py-2 pr-4">channel</td><td class="pr-4">on</td><td class="pr-4">(I − βkkᵀ) Diag(α) S + β k vᵀ</td><td class="font-sans">KDA</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="text-gray-700 mb-3">
+      This table is not a mnemonic — in the companion repository it is a
+      <a href="https://github.com/eitamar-saraf/kda" class="text-blue-700 hover:underline">test</a>.
+      One kernel with two flags is asserted, to floating-point tolerance, to reproduce six independent
+      transcriptions of the paper's Table 7, and separately to match the Triton kernels the Kimi team
+      released. Broadcasting a scalar gate across all channels turns KDA back into Gated DeltaNet
+      exactly; setting the decay to 1 turns it into DeltaNet.
+    </p>
+  </section>
+
+
+  <section id="position" class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">2. The decay is a positional encoding</h2>
+    <p class="text-gray-700 mb-3">
+      This is the most elegant observation in the paper and it is easy to miss. Unroll the recurrence
+      and the contribution of token <span class="font-mono text-sm">i</span> to the state at token
+      <span class="font-mono text-sm">t</span> carries the factor
+      <span class="font-mono text-sm">∏<sub>j=i+1</sub><sup>t</sup> α<sub>j</sub></span> — a product of
+      per-channel numbers that depends only on how far apart they are.
+    </p>
+    <p class="text-gray-700 mb-3">
+      Compare RoPE, which multiplies by
+      <span class="font-mono text-sm">∏ R<sub>j</sub></span>, a product of per-2-dimension
+      <em>rotations</em> whose frequencies are fixed by hand. Both encode distance as a product of
+      per-channel factors. RoPE's are periodic and chosen in advance; KDA's are monotone and learned.
+    </p>
+
+    <div data-widget="decay-as-position"></div>
+
+    <p class="text-gray-700 mb-3">
+      This is why Kimi Linear applies <b>no positional encoding at all</b> to its full-attention
+      layers. Position is delegated entirely to the KDA layers, which handle it dynamically, and the
+      global layers are left free to be pure content-based retrieval. It also sidesteps the usual
+      long-context headache of stretching RoPE's fixed frequencies past the lengths they were trained on.
+    </p>
+  </section>
+
+
+  <section id="fast" class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">3. Making it fast</h2>
+    <p class="text-gray-700 mb-3">
+      Everything above is a sequential loop, which is the worst possible shape for a GPU: thousands of
+      tiny dependent matrix updates, none big enough to fill a tensor core. The fix is to process the
+      sequence in chunks of <span class="font-mono text-sm">C</span> = 64. Inside a chunk everything
+      becomes a few dense matmuls; only chunk-to-chunk state passing stays sequential.
+    </p>
+
+    <div data-widget="chunkwise"></div>
+
+    <p class="text-gray-700 mb-3">
+      Two details in that derivation are worth pulling out, because they are where KDA earns its speed.
+    </p>
+    <p class="text-gray-700 mb-3">
+      <b>Binding both low-rank vectors to k.</b> Multiply out Eq. 1 and KDA's transition matrix is
+    </p>
+    <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-sm text-gray-900 overflow-x-auto">
+      (I − β<sub>t</sub> k<sub>t</sub> k<sub>t</sub>ᵀ) Diag(α<sub>t</sub>) &nbsp;=&nbsp; Diag(α<sub>t</sub>) − (β<sub>t</sub> k<sub>t</sub>)(α<sub>t</sub> ⊙ k<sub>t</sub>)ᵀ
+    </div>
+    <p class="text-gray-700 mb-3">
+      which is an instance of the general <em>diagonal-plus-low-rank</em> form
+      <span class="font-mono text-sm">D − a bᵀ</span>. The general version carries two
+      <em>independent</em> vectors <span class="font-mono text-sm">a</span> and
+      <span class="font-mono text-sm">b</span>; in KDA both are the same key up to scaling —
+      <span class="font-mono text-sm">a = β<sub>t</sub>k<sub>t</sub></span>,
+      <span class="font-mono text-sm">b = α<sub>t</sub> ⊙ k<sub>t</sub></span> — because that is exactly
+      what makes it a <em>delta</em> rule rather than an arbitrary rank-1 update. That tie cuts the
+      second-level chunk matmuls from four to two and removes three more: close to 2× kernel
+      throughput, obtained for free from a constraint that was already there for other reasons.
+      (I have this reduction as a test rather than a claim — writing it caught two mistakes in my
+      own DPLR reference before it caught anything about the kernels.)
+    </p>
+    <p class="text-gray-700 mb-3">
+      <b>Never form 1/Γ.</b> The chunkwise algebra contains a division by the cumulative decay. Over 64
+      tokens with α ≈ 0.8 that reciprocal reaches 10⁶, and in float16 — whose largest finite value is
+      65504 — it simply becomes infinity. I measured this: computing that matrix the naive way in fp16
+      produced <b>834 non-finite entries out of 4096</b>. The fix is not more precision, it is
+      refactoring. Every place the ratio appears it is a <em>pairwise</em> ratio
+      <span class="font-mono text-sm">γ<sub>r</sub>/γ<sub>i</sub></span> with
+      <span class="font-mono text-sm">i ≤ r</span>, and since the cumulative decay only decreases, that
+      is <span class="font-mono text-sm">exp(gc<sub>r</sub> − gc<sub>i</sub>)</span> with a
+      <em>non-positive</em> exponent. Every factor lands in (0, 1]. Same numbers, zero overflow: the
+      identical computation had a maximum error of 10⁻³, i.e. ordinary fp16 rounding.
+    </p>
+  </section>
+
+
+  <section id="results" class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">4. Does it hold up?</h2>
+    <p class="text-gray-700 mb-3">
+      I trained all six architectures plus a softmax baseline on three synthetic tasks, and
+      benchmarked the kernels, on two RTX 3090s. Some of it reproduces cleanly. Some of it does
+      not, and the part that does not is more interesting.
+    </p>
+    <h3 class="text-xl md:text-2xl font-semibold mt-8 mb-2">The efficiency claims reproduce, exactly</h3>
+    <p class="text-gray-700 mb-3">
+      This is the cleanest result of the lot. Timing KDA's chunk kernel against the <em>general</em>
+      DPLR kernel computing the same recurrence gives <b>1.8× at every sequence length from 2K to
+      64K</b> — flat, which is what you want from a claim that is structural rather than incidental.
+      The paper says "nearly 2×". It is nearly 2×.
+    </p>
+    <figure class="bg-white rounded border p-2 mb-2">
+      <img src="/plots/kimi-linear/kernel_bench.png" alt="Left: log-log kernel time vs sequence length, with flash attention crossing above KDA around 4096 tokens. Right: the DPLR-to-KDA speedup ratio, flat at about 1.8x across all lengths." class="w-full rounded" />
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. — One head configuration (16 heads, d=128), bf16, RTX 3090. The speedup is verified to be a speedup: the benchmark refuses to report a ratio unless the two kernels first agree numerically.</figcaption>
+    </figure>
+    <p class="text-gray-700 mb-3">
+      The left panel also shows the crossover I flagged in <a href="/blog/linear-attention#parentheses" class="text-blue-700 hover:underline">part 1</a> as a real thing rather than a caveat.
+      At 2048 tokens flash attention is <em>faster</em> than KDA (0.36 ms vs 0.46 ms). By 8K they have
+      swapped; by 64K attention is <b>24.6× slower</b> (336 ms vs 13.7 ms). Linear attention is a bet
+      on long context, and below about 4K tokens on this hardware it is a losing one.
+    </p>
+    <p class="text-gray-700 mb-3">
+      At the whole-model level the memory claim lands too. An 8-layer model at 16K context:
+    </p>
+    <div class="overflow-x-auto my-4">
+      <table class="w-full text-sm border-collapse">
+        <thead><tr class="border-b-2 border-gray-300 text-left">
+          <th class="py-2 pr-4 font-semibold">Configuration</th>
+          <th class="py-2 pr-4 font-semibold">Prefill, 16K tokens</th>
+          <th class="py-2 pr-4 font-semibold">Must be cached</th>
+          <th class="py-2 font-semibold">64K context</th>
+        </tr></thead>
+        <tbody>
+          <tr class="border-b border-gray-200"><td class="py-2 pr-4">Full attention</td><td class="pr-4 font-mono">2132 ms</td><td class="pr-4 font-mono">512 MB</td><td class="font-mono text-gray-500">out of memory</td></tr>
+          <tr class="border-b border-gray-200 bg-blue-50"><td class="py-2 pr-4">3:1 hybrid</td><td class="pr-4 font-mono">703 ms</td><td class="pr-4 font-mono">129.5 MB</td><td class="font-mono text-gray-500">out of memory</td></tr>
+          <tr><td class="py-2 pr-4">Pure KDA</td><td class="pr-4 font-mono">219 ms</td><td class="pr-4 font-mono">2 MB</td><td class="font-mono">912 ms</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-gray-700 mb-3">
+      129.5 MB against 512 MB is a <b>74.7% reduction</b> — the paper's 75%, arrived at from the
+      layer counts. And the qualitative difference at 64K is starker than any percentage: on a 24 GB
+      card the full-attention and hybrid models simply stop running, while pure KDA keeps going on a
+      state that never grows past 2 MB.
+    </p>
+
+    <h3 class="text-xl md:text-2xl font-semibold mt-8 mb-2">The recall claim reproduces — halfway</h3>
+    <p class="text-gray-700 mb-3">
+      MQAR turned out to be a much sharper instrument than I expected, and not in a good way. At
+      T = 1024 the outcome is <b>strictly bimodal</b>: a run either solves the task (~1.00) or sits at
+      chance (~0.04), with almost nothing in between. A three-seed mean is therefore not measuring
+      capability, it is counting coin flips. So I ran eight seeds and reported how often each model
+      solves the task at all.
+    </p>
+    <figure class="bg-white rounded border p-2 mb-2">
+      <img src="/plots/kimi-linear/solve_rate_mqar.png" alt="Left: bar chart of seeds solved out of 8 — DeltaNet 8, KDA 5, Gated DeltaNet 3, Mamba2 1, softmax attention 8. Right: every individual seed's accuracy, clustered at either 1.0 or near zero." class="w-full rounded" />
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. — MQAR at T=1024, 8 seeds, 2 layers, 2 heads. The right panel is the reason the left one exists: there is no meaningful middle to average.</figcaption>
+    </figure>
+    <p class="text-gray-700 mb-3">
+      Read down the gating hierarchy and the paper's ordering is right there:
+      <b>KDA (channel gate) 5/8 &gt; Gated DeltaNet (scalar gate) 3/8 &gt; Mamba2 (no delta rule) 1/8</b>.
+      Finer-grained gating really is more reliable than a scalar gate, and the delta rule really does
+      matter more than the gate. That is the paper's contribution, and it holds.
+    </p>
+    <p class="text-gray-700 mb-3">
+      And then there is the result I did not expect: <b>DeltaNet — no gate at all — solves it 8/8</b>,
+      matching full attention and beating every gated model. Palindrome says the same thing more
+      gently (DeltaNet 0.954 at T=2048, ahead of Gated DeltaNet's 0.851 and KDA's 0.789), and the
+      stack task is saturated for everything (≥0.99) so it discriminates nothing at these lengths.
+    </p>
+    <figure class="bg-white rounded border p-2 mb-2">
+      <img src="/plots/kimi-linear/accuracy_vs_length.png" alt="Three panels — mqar, palindrome, stack — showing accuracy against sequence length for KDA, Gated DeltaNet, Mamba2 and a softmax reference, with individual seeds as dots" class="w-full rounded" />
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. — Dots are individual seeds, lines are means. On MQAR the dots sit at the top and bottom of the axis and the mean line passes through territory no run ever occupied — which is exactly why the solve-rate figure above is the honest one.</figcaption>
+    </figure>
+    <p class="text-gray-700 mb-3">
+      Why would forgetting <em>hurt</em>? Because none of these tasks ask you to forget anything. Every
+      key-value pair in MQAR is queried; every symbol in a palindrome is needed. A forget gate can only
+      lose information a model is about to be graded on, so the best gate is one that stays open — and
+      an ungated model gets that for free while a gated one has to learn its way there. On that reading,
+      KDA beating Gated DeltaNet is precisely the expected result: with 128 independent dials per head
+      it can hold some channels open while a single scalar dial has to compromise across all of them.
+      The paper's own synthetic figure does not include DeltaNet, so this comparison is not one it makes.
+    </p>
+
+    <div class="my-6 p-4 rounded border bg-gray-50 text-gray-700 text-sm">
+      <b class="block mb-2">Scorecard for the mechanism</b>
+      <ul class="space-y-1.5 list-none">
+        <li><span class="text-green-700 font-semibold">Reproduced.</span> The ~2× kernel speedup from constraining DPLR — measured 1.8×, flat from 2K to 64K. The linear-vs-quadratic crossover, including where attention is genuinely faster.</li>
+        <li><span class="text-green-700 font-semibold">Reproduced.</span> The gating hierarchy on associative recall: channel gate &gt; scalar gate &gt; no delta rule (5/8, 3/8, 1/8 seeds).</li>
+        <li><span class="text-amber-700 font-semibold">Unexpected.</span> Ungated DeltaNet beats every gated variant on all three synthetic tasks — consistent with the tasks never requiring anything to be forgotten.</li>
+        <li><span class="text-gray-600 font-semibold">Elsewhere.</span> Whether the hybrid beats full attention is an architecture question, not a mechanism one — that is <a href="/blog/kimi-linear" class="text-blue-700 hover:underline">part 6</a>.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="wrong" class="mt-12">
+    <h2 class="text-2xl md:text-3xl font-bold mb-3">What I got wrong here</h2>
+    <p class="text-gray-700 mb-3">
+      <b>1. <span class="font-mono text-sm">inf × 0 = NaN</span>.</b> In the decay-weighted Gram matrix
+      I computed the exponential first and masked the upper triangle afterwards. Above the diagonal the
+      exponent is large and positive, so those entries overflowed to infinity — and infinity times a
+      zero mask is not zero, it is NaN. Clamping the exponent before exponentiating fixes it, and the
+      clamp is inert on every entry that survives the mask.
+    </p>
+    <p class="text-gray-700 mb-3">
+      <b>2. My baseline was crippled and I nearly believed it.</b> Every linear variant carries a short
+      convolution, which hands it a "look at the previous token" operation for free. My softmax
+      attention baseline did not have one, and it stalled at 0.32 on MQAR while KDA scored 1.00 — a
+      result that would have read as "linear attention beats attention at recall", which is the
+      opposite of true. Giving attention the same convolution took it straight to 1.00. The full grid:
+    </p>
+
+    <div class="overflow-x-auto my-4">
+      <table class="w-full max-w-md text-sm border-collapse">
+        <thead><tr class="border-b-2 border-gray-300 text-left">
+          <th class="py-2 pr-6 font-semibold">RoPE</th>
+          <th class="py-2 pr-6 font-semibold">Short conv</th>
+          <th class="py-2 font-semibold">MQAR accuracy</th>
+        </tr></thead>
+        <tbody class="font-mono">
+          <tr class="border-b border-gray-200 bg-green-50"><td class="py-1.5 pr-6">yes</td><td class="pr-6">yes</td><td class="font-semibold">1.00</td></tr>
+          <tr class="border-b border-gray-200"><td class="py-1.5 pr-6">no</td><td class="pr-6">yes</td><td>0.92</td></tr>
+          <tr class="border-b border-gray-200"><td class="py-1.5 pr-6">yes</td><td class="pr-6">no</td><td>0.32</td></tr>
+          <tr><td class="py-1.5 pr-6">no</td><td class="pr-6">no</td><td>0.34</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="text-gray-700 mb-3">
+      The convolution mattered far more than the positional encoding — an induction head has to learn
+      "the token after the match", and the convolution simply hands it that primitive.
+    </p>
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">The code</h2>
+    <p class="text-gray-700 mb-3">
+      Everything here is in <a href="https://github.com/eitamar-saraf/kda" class="text-blue-700 hover:underline">eitamar-saraf/kda</a>:
+      a readable O(T) reference, the chunkwise algorithm written to be followed line by line against
+      Eq. 2–9, the neural layer, the synthetic tasks, and the benchmarks. The correctness argument runs
+      in a chain, and every link is a test:
+    </p>
+    <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-xs md:text-sm text-gray-700 overflow-x-auto">
+      six transcriptions of Table 7 &nbsp;==&nbsp; one unified recurrence &nbsp;==&nbsp; our chunkwise algorithm<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;‖<br/>
+      the browser code in these figures &nbsp;==&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;the Kimi team's Triton kernels
+    </div>
+    <p class="text-gray-700 mb-3">
+      That last link is the one I care about most. The usual failure of an illustrated explainer is an
+      animation that quietly disagrees with the equations printed beside it, so the JavaScript in this
+      page is checked against fixtures generated by the same Python function the rest of the suite pins
+      to the paper.
+    </p>
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-2xl md:text-3xl font-bold mb-3">References</h2>
+    <ul class="text-gray-700 text-sm space-y-1 list-disc list-inside">
+      <li>Kimi Team. <a href="https://arxiv.org/abs/2510.26692" class="text-blue-700 hover:underline">Kimi Linear: An Expressive, Efficient Attention Architecture</a>, arXiv:2510.26692, 2025.</li>
+      <li>Katharopoulos et al. <i>Transformers are RNNs</i>, ICML 2020 — linear attention.</li>
+      <li>Schlag et al. <i>Linear Transformers Are Secretly Fast Weight Programmers</i>, ICML 2021 — the delta rule.</li>
+      <li>Yang et al. <i>Gated Linear Attention</i>, ICML 2024 — the per-channel gate.</li>
+      <li>Yang et al. <i>Gated Delta Networks</i>, ICLR 2025 — the model KDA refines.</li>
+      <li>Dao &amp; Gu. <i>Mamba-2 / State Space Duality</i>, ICML 2024.</li>
+      <li><a href="https://github.com/fla-org/flash-linear-attention" class="text-blue-700 hover:underline">flash-linear-attention</a> — the reference KDA kernels.</li>
+    </ul>
+  </section>
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-2xl md:text-3xl font-bold mb-3">The code</h2>
+    <p class="text-gray-700 mb-3">
+      Everything in this series is in <a href="https://github.com/eitamar-saraf/kda" class="text-blue-700 hover:underline">eitamar-saraf/kda</a>:
+      a readable O(T) reference, the chunkwise algorithm written to be followed against Eq. 2–9, the
+      neural layer, the synthetic tasks and the benchmarks. The correctness argument runs in a chain,
+      and every link is a test:
+    </p>
+    <div class="my-4 p-4 rounded border bg-gray-50 font-mono text-xs md:text-sm text-gray-700 overflow-x-auto">
+      six transcriptions of Table 7 &nbsp;==&nbsp; one unified recurrence &nbsp;==&nbsp; our chunkwise algorithm<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;‖<br/>
+      the browser code in these figures &nbsp;==&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;the Kimi team's Triton kernels
+    </div>
+    <p class="text-gray-700 mb-3">
+      That last link is the one I care about most. The usual failure of an illustrated explainer is an
+      animation that quietly disagrees with the equations printed beside it, so the JavaScript in these
+      figures is checked against fixtures generated by the same Python function the rest of the suite
+      pins to the paper.
+    </p>
+  </section>
+
+  <section class="mt-12 rounded-lg border border-blue-200 bg-blue-50 p-4">
+    <p class="text-sm text-gray-600 mb-1">Next in the series</p>
+    <p class="text-lg font-semibold mb-1">Part 5 — Multi-head Latent Attention <span class="text-sm font-normal text-gray-500">(not written yet)</span></p>
+    <p class="text-sm text-gray-700">KDA is one half of Kimi Linear. The other half is a compressed form of ordinary attention. Until then, <a href="/blog/kimi-linear" class="text-blue-700 hover:underline">part 6</a> covers the architecture that combines them.</p>
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-2xl md:text-3xl font-bold mb-3">References</h2>
+    <ul class="text-gray-700 text-sm space-y-1 list-disc list-inside">
+      <li>Kimi Team. <a href="https://arxiv.org/abs/2510.26692" class="text-blue-700 hover:underline">Kimi Linear: An Expressive, Efficient Attention Architecture</a>, arXiv:2510.26692, 2025.</li>
+      <li>Katharopoulos et al. <i>Transformers are RNNs</i>, ICML 2020 — linear attention.</li>
+      <li>Schlag et al. <i>Linear Transformers Are Secretly Fast Weight Programmers</i>, ICML 2021 — the delta rule.</li>
+      <li>Yang et al. <i>Gated Linear Attention</i>, ICML 2024 — the per-channel gate.</li>
+      <li>Yang et al. <i>Gated Delta Networks</i>, ICLR 2025 — the model KDA refines.</li>
+      <li>Dao &amp; Gu. <i>Mamba-2 / State Space Duality</i>, ICML 2024.</li>
+      <li><a href="https://github.com/fla-org/flash-linear-attention" class="text-blue-700 hover:underline">flash-linear-attention</a> — the reference KDA kernels.</li>
+      <li><a href="https://github.com/eitamar-saraf/kda" class="text-blue-700 hover:underline">eitamar-saraf/kda</a> — the implementation and experiments behind this series.</li>
+    </ul>
+  </section>
+
+  <script type="module" src="/kimi-linear/widgets.js"></script>
+  <script type="module" src="/kimi-linear/notes.js"></script>
+</BlogPostLayout>
