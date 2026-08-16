@@ -11,7 +11,7 @@ export const frontmatter = {
   <p class="mb-6 text-gray-700">I set out to run a small benchmark to pick an activation function for a tiny transformer I was building — expecting to confirm the folk knowledge everyone teaches: tanh saturates, ReLU dies, GELU is the modern default, SiLU is a slightly better ReLU, and Mish is a slightly better SiLU. Three hundred and twelve runs later, that story has holes in it. This post walks through what I actually saw across eight activation functions and five tasks, and focuses on the finding that changed how I think about the choice: <b>which activation wins doesn't depend on your data, it depends on your block.</b></p>
 
   <div class="mb-6 p-4 rounded border bg-blue-50 text-blue-900">
-    <b>TL;DR.</b> <b>SwiGLU wins every transformer task tested</b> — WikiText-2 LM by 11.6 PPL, WikiText-103 by 1.55 PPL, CIFAR-10 ViT by +2.5% top-1 (all with Cohen's <i>d</i> ≥ 2, most with <i>p</i> &lt; 10<sup>-4</sup>). <b>GELU is universal #2.</b> But two textbook claims fail. First, "tanh saturates" doesn't hold at this scale — only 0.4% of post-activations saturate at the end of training. When I tried the natural fix and multiplied tanh by 4 to unbound its range, it got <i>worse</i> by 12 PPL, not better. Second, on the same CIFAR-10 dataset a ResNet+BN prefers SiLU (85.7% top-1) while a ViT-tiny prefers SwiGLU/GELU (77.1%). The block, not the modality, drives the ranking — and the underlying probe that predicts rank flips sign between them.
+    <b>TL;DR.</b> <b>SwiGLU wins every transformer task tested</b> — <span class="tt" tabindex="0" data-tip="WikiText-2: ~2M tokens of verified-good Wikipedia articles. Small and clean, so a model this size overfits it within a few epochs — which makes activation differences easy to see.">WikiText-2</span> LM by 11.6 PPL, <span class="tt" tabindex="0" data-tip="WikiText-103: ~100M tokens (≈50× WikiText-2) from the same Wikipedia source. Tests whether the small-data ranking survives at larger scale.">WikiText-103</span> by 1.55 PPL, <span class="tt" tabindex="0" data-tip="CIFAR-10: 60,000 32×32 color images in 10 classes (50K train / 10K test). The canonical small vision benchmark.">CIFAR-10</span> ViT by +2.5% top-1 (all with <span class="tt" tabindex="0" data-tip="Cohen's d: a standardized effect size — mean difference divided by the pooled standard deviation. d≈0.8 is already 'large'; d>2 means the two groups barely overlap, an unusually big and unambiguous gap.">Cohen's <i>d</i> ≥ 2</span>, most with <i>p</i> &lt; 10<sup>-4</sup>). <b>GELU is universal #2.</b> But two textbook claims fail. First, "tanh saturates" doesn't hold at this scale — only 0.4% of post-activations saturate at the end of training. When I tried the natural fix and multiplied tanh by 4 to unbound its range, it got <i>worse</i> by 12 PPL, not better. Second, on the same CIFAR-10 dataset a ResNet+BN prefers SiLU (85.7% top-1) while a ViT-tiny prefers SwiGLU/GELU (77.1%). The block, not the modality, drives the ranking — and the underlying probe that predicts rank flips sign between them.
   </div>
 
   <nav class="mb-6 p-4 rounded border bg-gray-50 text-gray-700 text-sm md:text-base">
@@ -33,7 +33,7 @@ export const frontmatter = {
 
   <section id="setup" class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">The setup — 8 × 5 × 8 = 312 runs</h2>
-    <p class="text-gray-700 mb-3">The whole thing is small on purpose. Every model fits on a single GPU, every task trains in under half an hour, and the grid runs overnight on two RTX 3090s. That constraint disciplines the interpretation — nothing here is a claim about GPT-4-scale behavior, but every effect I report has eight independent seeds behind it, which is enough to run Welch's <i>t</i>-tests with Holm-Bonferroni corrections and see which findings survive.</p>
+    <p class="text-gray-700 mb-3">The whole thing is small on purpose. Every model fits on a single GPU, every task trains in under half an hour, and the grid runs overnight on two RTX 3090s. That constraint disciplines the interpretation — nothing here is a claim about GPT-4-scale behavior, but every effect I report has eight independent seeds behind it, which is enough to run <span class="tt" tabindex="0" data-tip="Welch's t-test: a two-sample t-test that does NOT assume the two groups share the same variance — the safe default when comparing two activations' seed distributions, which often have different spreads.">Welch's <i>t</i>-tests</span> with <span class="tt" tabindex="0" data-tip="Holm-Bonferroni: a correction for running many comparisons at once. Testing 21–28 activation pairs per task inflates false positives; Holm-Bonferroni tightens each p-value threshold so a 'significant' result still means something.">Holm-Bonferroni corrections</span> and see which findings survive.</p>
 
     <p class="text-gray-700 mb-3">Eight activations, five tasks, eight seeds each. The activation set:</p>
     <ul class="list-disc list-inside text-gray-700 space-y-1 mb-4">
@@ -344,4 +344,58 @@ export const frontmatter = {
   <p class="mt-6 text-base md:text-lg text-gray-600">Caveats to keep me honest: every model here is small (19M parameters for the biggest, under 300K for ResNet-20), and every dataset fits comfortably on a workstation. All effects are measured with N=8 seeds per (activation, task) — enough to run Welch's <i>t</i>-tests but not enough to make a definitive claim about tiny gaps like SiLU vs Mish. Every training run is in fp32; results with mixed precision would smear the activation-tail statistics this post relies on. And no run is longer than a single epoch schedule — I did not test whether the ranking survives 10× training compute at the same model size. The eight-activation × five-task × eight-seed grid, the analysis scripts, and the raw logs are all in the <a href="https://github.com/eitamar-saraf/act-bench" class="text-blue-700 hover:underline">repository</a>.</p>
 
   <p class="mt-4 text-base md:text-lg text-gray-600">Related: <a href="/blog/batchnorm" class="text-blue-700 hover:underline">why BatchNorm helps</a> and <a href="/blog/batchnorm-poisoning" class="text-blue-700 hover:underline">when it hurts</a> — the same layer that changes activation rankings has more than one way to bite.</p>
+
+  <style is:global>
+    /* Inline glossary tooltips — hover or focus to reveal a definition. Pure CSS, no JS. */
+    .tt {
+      position: relative;
+      border-bottom: 1px dotted #6b7280;
+      cursor: help;
+      font-weight: inherit;
+    }
+    .tt:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; border-radius: 2px; }
+    .tt::after {
+      content: attr(data-tip);
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 9px);
+      transform: translateX(-50%);
+      width: max-content;
+      max-width: min(320px, 88vw);
+      background: #111827;
+      color: #f9fafb;
+      padding: 9px 11px;
+      border-radius: 7px;
+      font-size: 0.8rem;
+      line-height: 1.4;
+      font-weight: 400;
+      font-style: normal;
+      text-align: left;
+      white-space: normal;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.15s ease;
+      z-index: 40;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+      pointer-events: none;
+    }
+    .tt::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 4px);
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-top-color: #111827;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.15s ease;
+      z-index: 40;
+    }
+    .tt:hover::after, .tt:focus::after,
+    .tt:hover::before, .tt:focus::before {
+      opacity: 1;
+      visibility: visible;
+    }
+  </style>
 </BlogPostLayout>
