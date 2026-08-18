@@ -8,17 +8,17 @@ export const frontmatter = {
 ---
 
 <BlogPostLayout frontmatter={frontmatter}>
-  <p class="mb-6 text-gray-700">I set out to run a small benchmark to pick an activation function for a tiny transformer I was building — expecting to confirm the folk knowledge everyone teaches: tanh saturates, ReLU dies, GELU is the modern default, SiLU is a slightly better ReLU, and Mish is a slightly better SiLU. Three hundred and twelve runs later, that story has holes in it. This post walks through what I actually saw across eight activation functions and five tasks, and focuses on the finding that changed how I think about the choice: <b>which activation wins doesn't depend on your data, it depends on your block.</b></p>
+  <p class="mb-6 text-gray-700">I set out to run a small benchmark to pick an activation function for a tiny transformer I was building — expecting to confirm the folk knowledge everyone teaches: tanh saturates, ReLU dies, GELU is the modern default, SiLU is a slightly better ReLU, and Mish is a slightly better SiLU. Two hundred and seventy-two runs later, that story has holes in it. This post walks through what I actually saw across seven activation functions and five tasks, and focuses on the finding that changed how I think about the choice: <b>which activation wins doesn't depend on your data, it depends on your block.</b></p>
 
   <div class="mb-6 p-4 rounded border bg-blue-50 text-blue-900">
-    <b>TL;DR.</b> <b>SwiGLU wins every transformer task tested</b> — <span class="tt" tabindex="0" data-tip="WikiText-2: ~2M tokens of verified-good Wikipedia articles. Small and clean, so a model this size overfits it within a few epochs — which makes activation differences easy to see.">WikiText-2</span> LM by 11.6 PPL, <span class="tt" tabindex="0" data-tip="WikiText-103: ~100M tokens (≈50× WikiText-2) from the same Wikipedia source. Tests whether the small-data ranking survives at larger scale.">WikiText-103</span> by 1.55 PPL, <span class="tt" tabindex="0" data-tip="CIFAR-10: 60,000 32×32 color images in 10 classes (50K train / 10K test). The canonical small vision benchmark.">CIFAR-10</span> ViT by +2.5% top-1 (all with <span class="tt" tabindex="0" data-tip="Cohen's d: a standardized effect size — mean difference divided by the pooled standard deviation. d≈0.8 is already 'large'; d>2 means the two groups barely overlap, an unusually big and unambiguous gap.">Cohen's <i>d</i> ≥ 2</span>, most with <i>p</i> &lt; 10<sup>-4</sup>). <b>GELU is universal #2.</b> But two textbook claims fail. First, "tanh saturates" doesn't hold at this scale — only 0.4% of post-activations saturate at the end of training. When I tried the natural fix and multiplied tanh by 4 to unbound its range, it got <i>worse</i> by 12 PPL, not better. Second, on the same CIFAR-10 dataset a ResNet+BN prefers SiLU (85.7% top-1) while a ViT-tiny prefers SwiGLU/GELU (77.1%). The block, not the modality, drives the ranking — and the underlying probe that predicts rank flips sign between them.
+    <b>TL;DR.</b> <b>SwiGLU wins every transformer task tested</b> — <span class="tt" tabindex="0" data-tip="WikiText-2: ~2M tokens of verified-good Wikipedia articles. Small and clean, so a model this size overfits it within a few epochs — which makes activation differences easy to see.">WikiText-2</span> LM by 11.6 PPL, <span class="tt" tabindex="0" data-tip="WikiText-103: ~100M tokens (≈50× WikiText-2) from the same Wikipedia source. Tests whether the small-data ranking survives at larger scale.">WikiText-103</span> by 1.55 PPL, <span class="tt" tabindex="0" data-tip="CIFAR-10: 60,000 32×32 color images in 10 classes (50K train / 10K test). The canonical small vision benchmark.">CIFAR-10</span> ViT by +2.5% top-1 (all with <span class="tt" tabindex="0" data-tip="Cohen's d: a standardized effect size — mean difference divided by the pooled standard deviation. d≈0.8 is already 'large'; d>2 means the two groups barely overlap, an unusually big and unambiguous gap.">Cohen's <i>d</i> ≥ 2</span>, most with <i>p</i> &lt; 10<sup>-4</sup>). <b>GELU is universal #2.</b> But two textbook claims fail. First, "tanh saturates" doesn't hold at this scale — only 0.4% of post-activations saturate at the end of training, and the deep-layer gradient is no smaller than GELU's, so whatever hurts tanh here, it isn't the vanishing-gradient story. Second, on the same CIFAR-10 dataset a ResNet+BN prefers SiLU (85.7% top-1) while a ViT-tiny prefers SwiGLU/GELU (77.1%). The block, not the modality, drives the ranking — and a gradient-flow probe that predicts rank on transformers flips sign under BatchNorm.
   </div>
 
   <nav class="mb-6 p-4 rounded border bg-gray-50 text-gray-700 text-sm md:text-base">
     <b class="block mb-1">Contents</b>
     <ol class="list-decimal list-inside space-y-0.5">
       <li><a href="#meet" class="text-blue-700 hover:underline">Meet the activations — a 30-year lineage</a></li>
-      <li><a href="#setup" class="text-blue-700 hover:underline">The setup — 8 × 5 × 8 = 312 runs</a></li>
+      <li><a href="#setup" class="text-blue-700 hover:underline">The setup — 7 activations × 5 tasks × 8 seeds</a></li>
       <li><a href="#headline" class="text-blue-700 hover:underline">The headline — one heatmap, five surprises</a></li>
       <li><a href="#swiglu" class="text-blue-700 hover:underline">Finding 1 — SwiGLU wins every transformer task</a></li>
       <li><a href="#gelu" class="text-blue-700 hover:underline">Finding 2 — GELU is the universal #2</a></li>
@@ -26,7 +26,7 @@ export const frontmatter = {
       <li><a href="#leaky" class="text-blue-700 hover:underline">Finding 4 — LeakyReLU with slope 0.01 does nothing</a></li>
       <li><a href="#tanh" class="text-blue-700 hover:underline">Finding 5 — "Tanh saturates" is wrong at this scale</a></li>
       <li><a href="#mish" class="text-blue-700 hover:underline">Finding 6 — Mish doesn't beat SiLU</a></li>
-      <li><a href="#mechanism" class="text-blue-700 hover:underline">The mechanism — post-std predicts rank, until BatchNorm doesn't let it</a></li>
+      <li><a href="#mechanism" class="text-blue-700 hover:underline">The mechanism — a gradient probe that flips sign under BatchNorm</a></li>
       <li><a href="#takeaways" class="text-blue-700 hover:underline">Takeaways</a></li>
       <li><a href="#references" class="text-blue-700 hover:underline">References</a></li>
     </ol>
@@ -34,11 +34,11 @@ export const frontmatter = {
 
   <section id="meet" class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">Meet the activations — a 30-year lineage</h2>
-    <p class="text-gray-700 mb-3">The eight functions in this benchmark trace almost the entire history of deep learning. Before the results, it's worth seeing what each one actually computes and where it came from — the shapes explain a lot of the rankings later.</p>
+    <p class="text-gray-700 mb-3">The seven functions in this benchmark trace almost the entire history of deep learning. Before the results, it's worth seeing what each one actually computes and where it came from — the shapes explain a lot of the rankings later.</p>
 
     <figure class="bg-white rounded border p-2 mb-2">
-      <img src="/plots/act-bench/activation_curves.png" alt="Grid of eight activation functions plotted over x from -4 to 4: tanh, ReLU, LeakyReLU, GELU, SiLU, Mish, SwiGLU (as a 1-D slice), and scaled_tanh, each with a dotted y=x reference line" class="w-full rounded" />
-      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 1 — The eight activations over <i>x</i> ∈ [−4, 4]. Dotted grey is <i>y</i> = <i>x</i>. Notice how the four best performers later (SwiGLU, GELU, SiLU, Mish) are all smooth and near-linear for positive <i>x</i>, while the two worst (tanh, scaled_tanh) flatten hard.</figcaption>
+      <img src="/plots/act-bench/activation_curves.png" alt="Grid of seven activation functions plotted over x from -4 to 4: tanh, ReLU, LeakyReLU, GELU, SiLU, Mish, and SwiGLU (as a 1-D slice), each with a dotted y=x reference line" class="w-full rounded" />
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 1 — The seven activations over <i>x</i> ∈ [−4, 4]. Dotted grey is <i>y</i> = <i>x</i>. Notice how the four best performers later (SwiGLU, GELU, SiLU, Mish) are all smooth and near-linear for positive <i>x</i>, while tanh — the worst pointwise activation — flattens hard on both ends.</figcaption>
     </figure>
 
     <p class="text-gray-700 mb-3">Reading the lineage roughly chronologically:</p>
@@ -93,12 +93,6 @@ export const frontmatter = {
             <td class="py-2 pr-4"><code>SiLU(xW<sub>gate</sub>) ⊙ (xW<sub>value</sub>) → W<sub>down</sub></code></td>
             <td class="py-2">Not a pointwise function but a <i>gated FFN</i>: one linear projection gates another. What Llama, Mistral, and PaLM use.</td>
           </tr>
-          <tr>
-            <td class="py-2 pr-4"><b>scaled_tanh</b></td>
-            <td class="py-2 pr-4">this study (diagnostic)</td>
-            <td class="py-2 pr-4"><code>4 · tanh(x)</code></td>
-            <td class="py-2">Not a real activation — my probe for the "tanh is bad because its range is bounded" hypothesis. Same shape as tanh, 4× the range.</td>
-          </tr>
         </tbody>
       </table>
     </div>
@@ -109,14 +103,13 @@ export const frontmatter = {
   </section>
 
   <section id="setup" class="mt-10">
-    <h2 class="text-3xl md:text-4xl font-bold mb-3">The setup — 8 × 5 × 8 = 312 runs</h2>
-    <p class="text-gray-700 mb-3">The whole thing is small on purpose. Every model fits on a single GPU, every task trains in under half an hour, and the grid runs overnight on two RTX 3090s. That constraint disciplines the interpretation — nothing here is a claim about GPT-4-scale behavior, but every effect I report has eight independent seeds behind it, which is enough to run <span class="tt" tabindex="0" data-tip="Welch's t-test: a two-sample t-test that does NOT assume the two groups share the same variance — the safe default when comparing two activations' seed distributions, which often have different spreads.">Welch's <i>t</i>-tests</span> with <span class="tt" tabindex="0" data-tip="Holm-Bonferroni: a correction for running many comparisons at once. Testing 21–28 activation pairs per task inflates false positives; Holm-Bonferroni tightens each p-value threshold so a 'significant' result still means something.">Holm-Bonferroni corrections</span> and see which findings survive.</p>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">The setup — 7 activations × 5 tasks × 8 seeds</h2>
+    <p class="text-gray-700 mb-3">The whole thing is small on purpose. Every model fits on a single GPU, every task trains in under half an hour, and the grid runs overnight on two RTX 3090s. That constraint disciplines the interpretation — nothing here is a claim about GPT-4-scale behavior, but every effect I report has eight independent seeds behind it, which is enough to run <span class="tt" tabindex="0" data-tip="Welch's t-test: a two-sample t-test that does NOT assume the two groups share the same variance — the safe default when comparing two activations' seed distributions, which often have different spreads.">Welch's <i>t</i>-tests</span> with <span class="tt" tabindex="0" data-tip="Holm-Bonferroni: a correction for running many comparisons at once. Testing 15–21 activation pairs per task inflates false positives; Holm-Bonferroni tightens each p-value threshold so a 'significant' result still means something.">Holm-Bonferroni corrections</span> and see which findings survive. SwiGLU only runs on the four transformer tasks (a CNN has no feed-forward block to gate), so the grid is 272 runs, not a clean 280.</p>
 
-    <p class="text-gray-700 mb-3">Eight activations, five tasks, eight seeds each. The activation set:</p>
+    <p class="text-gray-700 mb-3">Seven activations, five tasks, eight seeds each. The activation set:</p>
     <ul class="list-disc list-inside text-gray-700 space-y-1 mb-4">
       <li><code>tanh</code>, <code>relu</code>, <code>leaky</code> (slope 0.01), <code>gelu</code>, <code>silu</code> — the standard five you'll find in any textbook.</li>
       <li><code>mish</code> = <code>x · tanh(softplus(x))</code> — a Swish/SiLU competitor from 2019 that claims consistent wins over SiLU on vision.</li>
-      <li><code>scaled_tanh</code> = <code>4 · tanh(x)</code> — my own diagnostic. If "tanh is bad because its range is bounded to [−1, 1]" is the right story, this should help.</li>
       <li><code>swiglu</code> — not a pointwise activation but a gated FFN: <code>SiLU(xW<sub>gate</sub>) · (xW<sub>value</sub>) → W<sub>down</sub></code>. What every modern open LLM (Llama, Mistral, PaLM) actually uses. Hidden dim set to <code>2/3·d<sub>ff</sub></code> so parameter count matches the pointwise variants.</li>
     </ul>
 
@@ -145,23 +138,23 @@ export const frontmatter = {
     <p class="text-gray-700 mb-3">A few decisions worth flagging: I train in <b>fp32</b> everywhere. Mixed precision distorts the far tails of activation distributions, and this study measures those tails directly (dead fraction, tanh saturation percentile, moments of post-activation std). Bf16 would smear them. Every run also captures per-layer post-activation moments, dead fraction, gradient L2 norms, relative update size, throughput, and peak memory — dumped as JSON per epoch, so the mechanism analysis at the end has something to chew on.</p>
 
     <div class="p-4 rounded border bg-gray-50 text-gray-800">
-      <b>Statistical convention.</b> "Best val metric" is the min PPL (or max accuracy) across epochs — every task in this small-data setting overfits by epoch 6-8, so a final-epoch number would understate what each activation can actually do. All <i>p</i>-values are two-sided Welch's <i>t</i>-tests corrected for multiple comparisons within a task (Holm-Bonferroni over 21 or 28 pairs). Cohen's <i>d</i> is reported alongside because at N=8 you can chase small significant effects — <i>d</i> is more honest about size.
+      <b>Statistical convention.</b> "Best val metric" is the min PPL (or max accuracy) across epochs — every task in this small-data setting overfits by epoch 6-8, so a final-epoch number would understate what each activation can actually do. All <i>p</i>-values are two-sided Welch's <i>t</i>-tests corrected for multiple comparisons within a task (Holm-Bonferroni over 15 or 21 pairs). Cohen's <i>d</i> is reported alongside because at N=8 you can chase small significant effects — <i>d</i> is more honest about size.
     </div>
   </section>
 
   <section id="headline" class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">The headline — one heatmap, five surprises</h2>
-    <p class="text-gray-700 mb-3">Here is the whole benchmark in one image. Rows are activations, columns are tasks, cells are ranks. Rank 1 (green) is the best activation on that task; rank 7 or 8 (red) is the worst. <code>swiglu</code> is missing from the <code>vision_cnn</code> column because ResNet has no FFN to gate — I'll come back to that.</p>
+    <p class="text-gray-700 mb-3">Here is the whole benchmark in one image. Rows are activations, columns are tasks, cells are ranks. Rank 1 (green) is the best activation on that task; rank 7 (red) is the worst — or rank 6 on the CNN, which has one fewer activation. <code>swiglu</code> is missing from the <code>vision_cnn</code> column because ResNet has no FFN to gate — I'll come back to that.</p>
     <figure class="bg-white rounded border p-2 mb-2">
       <img src="/plots/act-bench/ranking_heatmap.png" alt="Cross-task ranking heatmap: activations as rows (tanh, relu, leaky, gelu, silu, mish, swiglu), tasks as columns (cls, lm, lm_large, vision_cnn, vision_vit), colored by rank" class="w-full rounded" />
       <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 2 — Cross-task ranking. Same architecture family agrees on ordering; different architecture disagrees.</figcaption>
     </figure>
-    <p class="text-gray-700 mb-3">Read down the SwiGLU row: rank 1, rank 1, rank 1, rank 1. Read down the tanh row: rank 6 everywhere. Now look at the SiLU row: rank 3 on <code>cls</code>, rank 5 on <code>lm</code>, rank 5 on <code>lm_large</code>, <b>rank 1</b> on <code>vision_cnn</code>, rank 6 on <code>vision_vit</code>. SiLU is either the best activation in this whole benchmark or one of the worst, depending on which block you put it in.</p>
+    <p class="text-gray-700 mb-3">Read down the SwiGLU row: rank 1, rank 1, rank 1, rank 1. Read down the tanh row: rank 7 everywhere (rank 6 on the CNN). Now look at the SiLU row: rank 3 on <code>cls</code>, rank 5 on <code>lm</code>, rank 5 on <code>lm_large</code>, <b>rank 1</b> on <code>vision_cnn</code>, rank 6 on <code>vision_vit</code>. SiLU is either the best activation in this whole benchmark or one of the worst, depending on which block you put it in.</p>
     <p class="text-gray-700 mb-3">The Friedman test on the rank matrix gives χ² = 22.97, <i>p</i> = 0.00081 — the ranking is significantly non-random across tasks. But five patterns jumped out that don't match what I expected to see. Each gets its own section below.</p>
 
     <div class="p-4 rounded border bg-emerald-50 text-emerald-900">
-      <b>What survived my priors:</b> tanh is worst, scaled_tanh is worst-plus, GELU is durable, ReLU is fine.<br/>
-      <b>What didn't:</b> SwiGLU is a strict upgrade, not a "specialized LLM trick." SiLU is task-dependent to a shocking degree. Mish's paper-advertised improvement over SiLU disappears. LeakyReLU with slope 0.01 is statistically identical to ReLU. And the standard "tanh saturates" mechanism story is wrong here — the actual predictor is something else entirely.
+      <b>What survived my priors:</b> tanh is worst, GELU is durable, ReLU is fine.<br/>
+      <b>What didn't:</b> SwiGLU is a strict upgrade, not a "specialized LLM trick." SiLU is task-dependent to a shocking degree. Mish's paper-advertised improvement over SiLU disappears. LeakyReLU with slope 0.01 is statistically identical to ReLU. And the standard "tanh saturates" mechanism story is wrong here — tanh barely saturates at all.
     </div>
   </section>
 
@@ -232,7 +225,7 @@ export const frontmatter = {
     <p class="text-gray-700 mb-3">Same data. Different block. Different ranking:</p>
 
     <figure class="bg-white rounded border p-2 mb-2">
-      <img src="/plots/act-bench/vision_cnn_best_metric_bar.png" alt="Best val top-1 on CIFAR-10 ResNet-20 across activations; SiLU is #1, Mish #2, GELU #3, tanh and scaled_tanh far behind" class="w-full rounded" />
+      <img src="/plots/act-bench/vision_cnn_best_metric_bar.png" alt="Best val top-1 on CIFAR-10 ResNet-20 across activations; SiLU is #1, Mish #2, GELU #3, tanh far behind" class="w-full rounded" />
       <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 4 — CIFAR-10 with ResNet-20 + BatchNorm. SiLU wins.</figcaption>
     </figure>
 
@@ -288,18 +281,11 @@ export const frontmatter = {
 
     <p class="text-gray-700 mb-3">Then the gradient argument fails a second check. If tanh were suffering from vanishing gradients across depth, the ratio of gradient L2 at the deepest layer to the shallowest should be dramatically smaller for tanh than for GELU. On WT-2 LM: tanh's deep/shallow ratio is 0.474; GELU's is 0.510. Difference within noise. Whatever is hurting tanh, it isn't vanishing gradients across depth.</p>
 
-    <p class="text-gray-700 mb-3">So I ran the diagnostic. If tanh's problem is bounded range, then multiplying tanh's output by 4 — same shape, same monotone S-curve, same derivative profile, just <b>four times the dynamic range</b> — should partially close the gap to GELU. I called that variant <code>scaled_tanh</code> and dropped it into the grid.</p>
+    <p class="text-gray-700 mb-3">So both classic explanations fail the measurement. Tanh isn't saturating (0.4% of units), and its gradient isn't vanishing across depth (the deep/shallow ratio matches GELU). Whatever costs tanh its eleven percent, the textbook mechanism isn't it.</p>
 
-    <div class="p-4 rounded border bg-rose-50 text-rose-900">
-      <b>The result:</b> <code>scaled_tanh</code>'s best WT-2 val PPL is <b>356.66</b>. Plain tanh is 344.72. GELU is 310.04.<br/><br/>
-      Multiplying tanh's output by 4 made it <b>12 PPL worse</b>, not better. Cohen's <i>d</i> = 5.01 vs plain tanh; every seed of scaled_tanh underperforms every seed of tanh. The result is the same on all four other tasks: scaled_tanh is <b>rank 8</b> on every ranked column and <b>rank 7</b> on <code>vision_cnn</code>. It's the worst activation in the benchmark. And critically — same shape as tanh, same gradient profile, just bigger outputs.
-    </div>
+    <h3 class="text-2xl font-bold mt-8 mb-2">What I can rule out — and what I can't</h3>
 
-    <p class="text-gray-700 mb-3 mt-4">The bounded-range hypothesis is falsified. Something else is going on with tanh.</p>
-
-    <h3 class="text-2xl font-bold mt-8 mb-2">The real predictor: post-activation std</h3>
-
-    <p class="text-gray-700 mb-3">Look at the post-activation std, aggregated across layers and seeds at end of training, side by side with the WT-2 PPL rank:</p>
+    <p class="text-gray-700 mb-3">The natural next guess is activation magnitude: tanh's outputs are bigger on average than the winners'. Here is the post-activation std at end of training, next to the WT-2 rank:</p>
 
     <div class="overflow-x-auto mb-4">
       <table class="w-full text-sm md:text-base border-collapse">
@@ -307,26 +293,23 @@ export const frontmatter = {
           <th class="py-2 pr-4">rank</th><th class="py-2 pr-4">activation</th><th class="py-2 pr-4">val PPL</th><th class="py-2 pr-4">post-activation std</th><th class="py-2">dead fraction</th>
         </tr></thead>
         <tbody class="text-gray-700">
-          <tr class="border-b"><td class="py-2 pr-4">1</td><td class="py-2 pr-4">swiglu</td><td class="py-2 pr-4"><b>298.40</b></td><td class="py-2 pr-4">0.33</td><td class="py-2">—</td></tr>
+          <tr class="border-b"><td class="py-2 pr-4">1</td><td class="py-2 pr-4">swiglu</td><td class="py-2 pr-4"><b>298.40</b></td><td class="py-2 pr-4"><b>0.83</b></td><td class="py-2">—</td></tr>
           <tr class="border-b"><td class="py-2 pr-4">2</td><td class="py-2 pr-4">gelu</td><td class="py-2 pr-4">310.04</td><td class="py-2 pr-4">0.34</td><td class="py-2">—</td></tr>
           <tr class="border-b"><td class="py-2 pr-4">3</td><td class="py-2 pr-4">relu</td><td class="py-2 pr-4">313.66</td><td class="py-2 pr-4">0.36</td><td class="py-2">63.7%</td></tr>
           <tr class="border-b"><td class="py-2 pr-4">4</td><td class="py-2 pr-4">leaky</td><td class="py-2 pr-4">313.90</td><td class="py-2 pr-4">0.36</td><td class="py-2">63.8%</td></tr>
           <tr class="border-b"><td class="py-2 pr-4">5</td><td class="py-2 pr-4">silu</td><td class="py-2 pr-4">320.02</td><td class="py-2 pr-4">0.35</td><td class="py-2">—</td></tr>
           <tr class="border-b"><td class="py-2 pr-4">6</td><td class="py-2 pr-4">mish</td><td class="py-2 pr-4">320.86</td><td class="py-2 pr-4">0.40</td><td class="py-2">—</td></tr>
-          <tr class="border-b"><td class="py-2 pr-4">7</td><td class="py-2 pr-4">tanh</td><td class="py-2 pr-4">344.72</td><td class="py-2 pr-4"><b>0.55</b></td><td class="py-2">—</td></tr>
-          <tr><td class="py-2 pr-4">8</td><td class="py-2 pr-4">scaled_tanh</td><td class="py-2 pr-4">356.66</td><td class="py-2 pr-4"><b>2.21</b></td><td class="py-2">—</td></tr>
+          <tr><td class="py-2 pr-4">7</td><td class="py-2 pr-4">tanh</td><td class="py-2 pr-4">344.72</td><td class="py-2 pr-4"><b>0.55</b></td><td class="py-2">—</td></tr>
         </tbody>
       </table>
     </div>
 
-    <p class="text-gray-700 mb-3">The four best activations sit in a narrow band of post-std around 0.33–0.40. Tanh is at 0.55. Scaled_tanh — the same shape multiplied by four — is at 2.21, which is 6.5× the winning activation. Spearman correlation between mean post-std and rank across all seven pointwise activations on WT-2 is <b>ρ = +0.89</b>, and it stays at +0.82 to +0.89 on WT-103, cls, and ViT.</p>
+    <p class="text-gray-700 mb-3">It's tempting — the five pointwise activations line up almost monotonically, from GELU's 0.34 up to tanh's 0.55. But <b>SwiGLU breaks it</b>: it has the highest post-activation std of the whole group (0.83) and is still rank 1. Across the six activations the Spearman correlation between post-std and rank is only <b>ρ = +0.14</b> — no real relationship. Magnitude tracks the pointwise ranking loosely but isn't the cause; it can't be, or the gated winner wouldn't sit on top.</p>
 
-    <p class="text-gray-700 mb-3">There's a mechanism story that fits this. Every transformer FFN sits between two LayerNorms and a residual stream. The residual stream has a roughly stable norm; the FFN's job is to add a small correction into it. If the FFN's post-activation is small-magnitude, the LayerNorm downstream doesn't have to rescale much, and the effective learning signal to the FFN's parameters is well-conditioned. If the FFN's post-activation blasts out at 4× the residual's magnitude, the downstream LayerNorm has to divide by roughly the same factor, and the information the FFN encoded now lives in a much narrower slice of the dynamic range. Scaling tanh up looks like it should help by giving the FFN more expressive range; in fact it just forces the downstream norm to squash the signal harder, and the model fits worse.</p>
-
-    <p class="text-gray-700 mb-3">The generalization-gap check backs this up. If tanh were "correct on training data but bad at generalizing", we'd see similar train loss and worse val loss. What we actually see: tanh's train loss at best epoch is <b>5.22</b>, GELU's is <b>5.09</b>, scaled_tanh's is <b>5.33</b>. The gap is on the train side too — these activations aren't overfitting differently, they're <i>fitting differently</i>. That's an optimization/representation gap, not a generalization gap.</p>
+    <p class="text-gray-700 mb-3">What I can say with confidence is narrower, and it's a claim about <i>when</i> tanh loses, not why. Look at the train loss, not the val: tanh's train loss at its best epoch is <b>5.22</b> versus GELU's <b>5.09</b>. The gap is already on the training side — tanh isn't overfitting more, it's <i>fitting the data worse from the start</i>. That rules out a generalization story and points at optimization or representational capacity. But pinning it to a single activation statistic, at this scale, I can't honestly do — the cleanest probes I have don't separate tanh from the pack any better than the rank already does.</p>
 
     <div class="p-4 rounded border bg-emerald-50 text-emerald-900">
-      <b>What replaces the textbook story:</b> The reason tanh underperforms on this scale of transformer isn't that it saturates. It's that its post-activation std is roughly 1.6× everyone else's, which the downstream LayerNorm has to compensate for, which costs representational bandwidth. The "fix" of unbounding the range makes the std even larger and makes the problem worse.
+      <b>What replaces the textbook story:</b> Not "tanh saturates." At this scale tanh barely saturates and its deep-layer gradients are healthy. What's measurable is that tanh fits the <i>training</i> data worse than the smooth ReLU-family activations — a capacity/optimization gap, not a saturation or generalization one. The precise single-number cause is genuinely open, and I'd rather say that than overfit a story to one dataset.
     </div>
   </section>
 
@@ -359,32 +342,32 @@ export const frontmatter = {
   </section>
 
   <section id="mechanism" class="mt-10">
-    <h2 class="text-3xl md:text-4xl font-bold mb-3">The mechanism — post-std predicts rank, until BatchNorm doesn't let it</h2>
-    <p class="text-gray-700 mb-3">The last thing I want to show is what actually explains the rankings. For every activation I recorded three per-run probes at end of training: post-activation std, gradient L2 norm on the FFN parameters, and relative update size ‖ΔW‖/‖W‖ per layer. Then I asked the boring question: for each task, which probe most strongly correlates with the activation's rank?</p>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">The mechanism — a gradient probe that flips sign under BatchNorm</h2>
+    <p class="text-gray-700 mb-3">The last thing I want to show is the one mechanism signal that holds up across the whole grid. For every activation I recorded two per-run gradient probes at end of training: the gradient L2 norm on each layer's parameters, and the relative update size ‖ΔW‖/‖W‖. Then I asked the boring question: for each task, do those probes correlate with the activation's rank?</p>
 
     <figure class="bg-white rounded border p-2 mb-2">
-      <img src="/plots/act-bench/mechanism_correlation.png" alt="Bar chart of Spearman rank correlation between two probes (post-std and gradient L2) and activation rank, per task. On four transformer tasks, post-std is around +0.85 (higher std = worse rank) and gradient L2 is around -0.85. On vision_cnn (ResNet+BN), post-std drops to +0.14 and gradient L2 flips sign to +0.96." class="w-full rounded" />
-      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 7 — Spearman ρ(probe, rank) per task. On transformer FFNs, low post-std and high gradient L2 predict a winning activation. On CNN+BN, post-std stops predicting rank and gradient L2 flips sign.</figcaption>
+      <img src="/plots/act-bench/mechanism_correlation.png" alt="Bar chart of Spearman rank correlation between two gradient probes (gradient L2 and relative update) and activation rank, per task. On the LM and ViT transformer tasks both probes are negative; on CIFAR-10 ResNet with BatchNorm both flip strongly positive." class="w-full rounded" />
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 7 — Spearman ρ(probe, rank) per task. On the LM and ViT transformer tasks a bigger gradient signal goes with a <i>better</i> activation (ρ negative). Under BatchNorm (CIFAR-10 ResNet) both probes flip strongly positive.</figcaption>
     </figure>
 
-    <p class="text-gray-700 mb-3">On every transformer task — the two LMs, the classifier, and the ViT — the pattern is the same:</p>
+    <p class="text-gray-700 mb-3">On the transformer tasks the correlations are negative or, on the easy AG News task, near zero — a bigger gradient signal goes with a better-ranked activation:</p>
     <ul class="list-disc list-inside text-gray-700 space-y-1 mb-3">
-      <li><b>post-activation std</b> correlates with rank at ρ ≈ +0.82 to +0.89. Higher std → worse rank. Small activations win.</li>
-      <li><b>gradient L2</b> correlates with rank at ρ ≈ −0.62 to −0.93. Higher gradient magnitude → better rank. Well-flowing gradients win.</li>
+      <li><b>gradient L2 ↔ rank:</b> WT-2 LM ρ = −0.82, ViT ρ = −0.89, WT-103 ρ = −0.43, AG News ρ ≈ 0. Higher gradient magnitude → better (lower) rank.</li>
+      <li><b>relative update ↔ rank:</b> WT-2 ρ = −0.89, WT-103 ρ = −0.82, ViT ρ = −0.71, AG News ρ ≈ +0.11.</li>
     </ul>
-    <p class="text-gray-700 mb-3">On <code>vision_cnn</code> — CIFAR-10 with a ResNet-20 that has BatchNorm sandwiched between every conv and every activation — both correlations change dramatically:</p>
+    <p class="text-gray-700 mb-3">On <code>vision_cnn</code> — CIFAR-10 with a ResNet-20 that has BatchNorm sandwiched between every conv and every activation — <b>both probes flip strongly positive</b>:</p>
     <ul class="list-disc list-inside text-gray-700 space-y-1 mb-3">
-      <li><b>post-std</b> correlation collapses from ρ ≈ +0.85 to ρ = +0.14. The probe stops predicting rank.</li>
-      <li><b>gradient L2</b> flips from ρ ≈ −0.85 to ρ = <b>+0.96</b>. On CNN+BN, <i>higher</i> gradient L2 means <i>worse</i> activation, not better.</li>
+      <li><b>gradient L2 ↔ rank: ρ = +0.94.</b> Higher gradient magnitude now means a <i>worse</i> activation.</li>
+      <li><b>relative update ↔ rank: ρ = +0.89.</b> Same flip.</li>
     </ul>
 
-    <p class="text-gray-700 mb-3">The sign flip on gradient L2 is what surprised me most. On transformers, you can look at an activation and say "the healthier its gradient, the more it's learning, so the better it is." That reasoning breaks completely on CNN+BN. On <code>vision_cnn</code>, tanh and scaled_tanh have the <i>largest</i> gradient L2 norms — because BatchNorm rescales their activations to unit variance regardless of the natural output range, which makes the effective per-parameter gradient signal larger than it would otherwise be. But the model's still losing 8 accuracy points, because the underlying representation is worse — BN just isn't propagating that badness through the probe.</p>
+    <p class="text-gray-700 mb-3">The sign flip is what surprised me most. On a transformer you can look at an activation and say "the healthier its gradient, the more it's learning, so the better it is." That reasoning breaks completely under BatchNorm. On <code>vision_cnn</code>, the worst activations (tanh especially) carry the <i>largest</i> gradient norms — because BatchNorm rescales their activations back to unit variance regardless of the natural output range, which inflates the effective per-parameter gradient. But the model is still losing 8 accuracy points, because the underlying representation is worse — BN just isn't letting that badness show up in the gradient probe.</p>
 
     <div class="p-4 rounded border bg-amber-50 text-amber-900">
-      <b>What this means for interpretation.</b> The intuition "check gradient magnitudes to diagnose which activation is healthy" works on transformer FFNs — and only there. Under BatchNorm the gradient magnitude is a function of BN's normalization, not of what the activation is actually doing. If you want to compare activations inside a BN block, the useful signal has to come from something BN isn't rescaling — probably validation accuracy directly, or a probe of the post-BN, pre-activation distribution.
+      <b>What this means for interpretation.</b> The intuition "check gradient magnitudes to see which activation is healthy" works on transformer FFNs — and only there. Under BatchNorm the gradient magnitude is largely a function of BN's normalization, not of what the activation is doing. If you want to compare activations inside a BN block, the useful signal has to come from something BN isn't rescaling — the simplest being validation accuracy itself.
     </div>
 
-    <p class="text-gray-700 mb-3 mt-4">This is also the mechanism explanation for Finding 3 (block-not-modality). The whole reason CIFAR-10 has a different winner under ResNet vs ViT is that the CNN sits inside BatchNorm, and BN erases the "small post-activation std" advantage that GELU and SwiGLU rely on. Once that advantage is gone, whichever activation has the best raw representational properties in a BN'd conv block — which turns out to be SiLU and Mish — wins.</p>
+    <p class="text-gray-700 mb-3 mt-4">This is the mechanism side of Finding 3 (block-not-modality). CIFAR-10 has a different winner under ResNet vs ViT because the ResNet wraps every activation in BatchNorm, which changes the optimization geometry enough to invert the gradient probe — and, empirically, to hand the win to SiLU and Mish instead of the SwiGLU/GELU pair that tops every un-BatchNormed transformer.</p>
   </section>
 
   <section id="takeaways" class="mt-10">
@@ -394,9 +377,9 @@ export const frontmatter = {
       <li>SwiGLU is a strict upgrade over GELU on transformer FFNs. Every task tested. The paper-count of modern LLMs using it isn't marketing — it replicates at small scale too.</li>
       <li>GELU is the boring right answer if you can't do SwiGLU. Universal #2, tightest seed variance in the benchmark, never worse than rank 3.</li>
       <li>LeakyReLU with slope 0.01 is statistically indistinguishable from ReLU. If you're going to leak, leak harder (0.1+) or learn the slope (PReLU); 0.01 buys nothing.</li>
-      <li>The "tanh saturates" mechanism doesn't hold at this scale — the actual issue is post-activation std being 1.6× everyone else's, forcing the downstream LayerNorm to compensate. Scaling tanh up makes it worse, not better.</li>
+      <li>The "tanh saturates" mechanism doesn't hold at this scale — tanh barely saturates (0.4% of units) and its deep-layer gradients are healthy. It just fits the training data worse from the start; the precise single-number cause is still open.</li>
       <li>The Mish paper's advertised improvement over SiLU doesn't reproduce here. Every activation-choice claim you read is conditional on a training regime; it's cheap to check.</li>
-      <li>Under BatchNorm, the "activation probes" that predict rank on transformer FFNs stop working — post-std correlation collapses and gradient L2 flips sign. Don't reuse transformer diagnostics on CNN+BN activations.</li>
+      <li>Under BatchNorm, the gradient probes that predict rank on transformer FFNs flip sign — a bigger gradient signals a <i>worse</i> activation, not a better one. Don't reuse transformer diagnostics on CNN+BN activations.</li>
       <li>Everything above is at the small-model, small-data scale. The finding I'd trust to generalize is the block-not-modality one; the size of the gaps almost certainly shrinks at real LLM scale (WT-103's gap is already smaller than WT-2's).</li>
     </ul>
   </section>
@@ -418,7 +401,7 @@ export const frontmatter = {
     <a href="https://github.com/eitamar-saraf/act-bench" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-5 py-3 rounded border text-blue-700 hover:bg-blue-50 text-base md:text-lg">Repository</a>
   </div>
 
-  <p class="mt-6 text-base md:text-lg text-gray-600">Caveats to keep me honest: every model here is small (19M parameters for the biggest, under 300K for ResNet-20), and every dataset fits comfortably on a workstation. All effects are measured with N=8 seeds per (activation, task) — enough to run Welch's <i>t</i>-tests but not enough to make a definitive claim about tiny gaps like SiLU vs Mish. Every training run is in fp32; results with mixed precision would smear the activation-tail statistics this post relies on. And no run is longer than a single epoch schedule — I did not test whether the ranking survives 10× training compute at the same model size. The eight-activation × five-task × eight-seed grid, the analysis scripts, and the raw logs are all in the <a href="https://github.com/eitamar-saraf/act-bench" class="text-blue-700 hover:underline">repository</a>.</p>
+  <p class="mt-6 text-base md:text-lg text-gray-600">Caveats to keep me honest: every model here is small (19M parameters for the biggest, under 300K for ResNet-20), and every dataset fits comfortably on a workstation. All effects are measured with N=8 seeds per (activation, task) — enough to run Welch's <i>t</i>-tests but not enough to make a definitive claim about tiny gaps like SiLU vs Mish. Every training run is in fp32; results with mixed precision would smear the activation-tail statistics this post relies on. And no run is longer than a single epoch schedule — I did not test whether the ranking survives 10× training compute at the same model size. The seven-activation × five-task × eight-seed grid, the analysis scripts, and the raw logs are all in the <a href="https://github.com/eitamar-saraf/act-bench" class="text-blue-700 hover:underline">repository</a>.</p>
 
   <p class="mt-4 text-base md:text-lg text-gray-600">Related: <a href="/blog/batchnorm" class="text-blue-700 hover:underline">why BatchNorm helps</a> and <a href="/blog/batchnorm-poisoning" class="text-blue-700 hover:underline">when it hurts</a> — the same layer that changes activation rankings has more than one way to bite.</p>
 
