@@ -17,6 +17,7 @@ export const frontmatter = {
   <nav class="mb-6 p-4 rounded border bg-gray-50 text-gray-700 text-sm md:text-base">
     <b class="block mb-1">Contents</b>
     <ol class="list-decimal list-inside space-y-0.5">
+      <li><a href="#meet" class="text-blue-700 hover:underline">Meet the activations — a 30-year lineage</a></li>
       <li><a href="#setup" class="text-blue-700 hover:underline">The setup — 8 × 5 × 8 = 312 runs</a></li>
       <li><a href="#headline" class="text-blue-700 hover:underline">The headline — one heatmap, five surprises</a></li>
       <li><a href="#swiglu" class="text-blue-700 hover:underline">Finding 1 — SwiGLU wins every transformer task</a></li>
@@ -30,6 +31,82 @@ export const frontmatter = {
       <li><a href="#references" class="text-blue-700 hover:underline">References</a></li>
     </ol>
   </nav>
+
+  <section id="meet" class="mt-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">Meet the activations — a 30-year lineage</h2>
+    <p class="text-gray-700 mb-3">The eight functions in this benchmark trace almost the entire history of deep learning. Before the results, it's worth seeing what each one actually computes and where it came from — the shapes explain a lot of the rankings later.</p>
+
+    <figure class="bg-white rounded border p-2 mb-2">
+      <img src="/plots/act-bench/activation_curves.png" alt="Grid of eight activation functions plotted over x from -4 to 4: tanh, ReLU, LeakyReLU, GELU, SiLU, Mish, SwiGLU (as a 1-D slice), and scaled_tanh, each with a dotted y=x reference line" class="w-full rounded" />
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 1 — The eight activations over <i>x</i> ∈ [−4, 4]. Dotted grey is <i>y</i> = <i>x</i>. Notice how the four best performers later (SwiGLU, GELU, SiLU, Mish) are all smooth and near-linear for positive <i>x</i>, while the two worst (tanh, scaled_tanh) flatten hard.</figcaption>
+    </figure>
+
+    <p class="text-gray-700 mb-3">Reading the lineage roughly chronologically:</p>
+    <div class="overflow-x-auto mb-4">
+      <table class="w-full text-sm md:text-base border-collapse">
+        <thead><tr class="border-b text-left">
+          <th class="py-2 pr-4">activation</th>
+          <th class="py-2 pr-4">published</th>
+          <th class="py-2 pr-4">formula</th>
+          <th class="py-2">in one line</th>
+        </tr></thead>
+        <tbody class="text-gray-700 align-top">
+          <tr class="border-b">
+            <td class="py-2 pr-4"><b>tanh</b></td>
+            <td class="py-2 pr-4">1990s (classic)</td>
+            <td class="py-2 pr-4"><code>(e<sup>x</sup> − e<sup>−x</sup>) / (e<sup>x</sup> + e<sup>−x</sup>)</code></td>
+            <td class="py-2">The pre-ReLU default. Squashes every input into (−1, 1); saturates on both ends.</td>
+          </tr>
+          <tr class="border-b">
+            <td class="py-2 pr-4"><b>ReLU</b></td>
+            <td class="py-2 pr-4">Nair &amp; Hinton, 2010</td>
+            <td class="py-2 pr-4"><code>max(0, x)</code></td>
+            <td class="py-2">The one that made deep nets trainable. Linear for positive <i>x</i>, hard zero below.</td>
+          </tr>
+          <tr class="border-b">
+            <td class="py-2 pr-4"><b>LeakyReLU</b></td>
+            <td class="py-2 pr-4">Maas et al., 2013</td>
+            <td class="py-2 pr-4"><code>x</code> if <code>x &gt; 0</code> else <code>0.01·x</code></td>
+            <td class="py-2">ReLU with a small negative slope, meant to keep "dead" units learning.</td>
+          </tr>
+          <tr class="border-b">
+            <td class="py-2 pr-4"><b>GELU</b></td>
+            <td class="py-2 pr-4">Hendrycks &amp; Gimpel, 2016</td>
+            <td class="py-2 pr-4"><code>x · Φ(x)</code> &nbsp;<span class="text-gray-500">(Φ = normal CDF)</span></td>
+            <td class="py-2">A smooth ReLU that weights each input by its normal percentile. The transformer default (BERT, GPT).</td>
+          </tr>
+          <tr class="border-b">
+            <td class="py-2 pr-4"><b>SiLU / Swish</b></td>
+            <td class="py-2 pr-4">Elfwing / Ramachandran, 2017</td>
+            <td class="py-2 pr-4"><code>x · σ(x)</code> &nbsp;<span class="text-gray-500">(σ = sigmoid)</span></td>
+            <td class="py-2">Smooth, self-gated, and non-monotonic — dips slightly below zero before rising. Found by search on CIFAR.</td>
+          </tr>
+          <tr class="border-b">
+            <td class="py-2 pr-4"><b>Mish</b></td>
+            <td class="py-2 pr-4">Misra, 2019</td>
+            <td class="py-2 pr-4"><code>x · tanh(softplus(x))</code></td>
+            <td class="py-2">A smoother cousin of SiLU; the paper claims consistent gains over it on vision.</td>
+          </tr>
+          <tr class="border-b">
+            <td class="py-2 pr-4"><b>SwiGLU</b></td>
+            <td class="py-2 pr-4">Shazeer, 2020</td>
+            <td class="py-2 pr-4"><code>SiLU(xW<sub>gate</sub>) ⊙ (xW<sub>value</sub>) → W<sub>down</sub></code></td>
+            <td class="py-2">Not a pointwise function but a <i>gated FFN</i>: one linear projection gates another. What Llama, Mistral, and PaLM use.</td>
+          </tr>
+          <tr>
+            <td class="py-2 pr-4"><b>scaled_tanh</b></td>
+            <td class="py-2 pr-4">this study (diagnostic)</td>
+            <td class="py-2 pr-4"><code>4 · tanh(x)</code></td>
+            <td class="py-2">Not a real activation — my probe for the "tanh is bad because its range is bounded" hypothesis. Same shape as tanh, 4× the range.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="p-4 rounded border bg-gray-50 text-gray-800">
+      <b>The one structural split to keep in mind.</b> Seven of these are <b>pointwise</b> — they take a single number and return a single number, so you can draw them as a curve. <b>SwiGLU is different:</b> it replaces the whole feed-forward block with a <i>gate</i>, where one learned projection multiplies another element-wise. That's why it can't be a single curve in Fig. 1 (I plot the 1-D slice <code>SiLU(x)·x</code> to hint at the shape), and it's why it can only slot into architectures that have a feed-forward block to replace — which becomes important in Finding 1.
+    </div>
+  </section>
 
   <section id="setup" class="mt-10">
     <h2 class="text-3xl md:text-4xl font-bold mb-3">The setup — 8 × 5 × 8 = 312 runs</h2>
@@ -77,7 +154,7 @@ export const frontmatter = {
     <p class="text-gray-700 mb-3">Here is the whole benchmark in one image. Rows are activations, columns are tasks, cells are ranks. Rank 1 (green) is the best activation on that task; rank 7 or 8 (red) is the worst. <code>swiglu</code> is missing from the <code>vision_cnn</code> column because ResNet has no FFN to gate — I'll come back to that.</p>
     <figure class="bg-white rounded border p-2 mb-2">
       <img src="/plots/act-bench/ranking_heatmap.png" alt="Cross-task ranking heatmap: activations as rows (tanh, relu, leaky, gelu, silu, mish, swiglu), tasks as columns (cls, lm, lm_large, vision_cnn, vision_vit), colored by rank" class="w-full rounded" />
-      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 1 — Cross-task ranking. Same architecture family agrees on ordering; different architecture disagrees.</figcaption>
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 2 — Cross-task ranking. Same architecture family agrees on ordering; different architecture disagrees.</figcaption>
     </figure>
     <p class="text-gray-700 mb-3">Read down the SwiGLU row: rank 1, rank 1, rank 1, rank 1. Read down the tanh row: rank 6 everywhere. Now look at the SiLU row: rank 3 on <code>cls</code>, rank 5 on <code>lm</code>, rank 5 on <code>lm_large</code>, <b>rank 1</b> on <code>vision_cnn</code>, rank 6 on <code>vision_vit</code>. SiLU is either the best activation in this whole benchmark or one of the worst, depending on which block you put it in.</p>
     <p class="text-gray-700 mb-3">The Friedman test on the rank matrix gives χ² = 22.97, <i>p</i> = 0.00081 — the ranking is significantly non-random across tasks. But five patterns jumped out that don't match what I expected to see. Each gets its own section below.</p>
@@ -94,7 +171,7 @@ export const frontmatter = {
 
     <figure class="bg-white rounded border p-2 mb-2">
       <img src="/plots/act-bench/lm_best_metric_bar.png" alt="Bar chart of best val perplexity across activations on WikiText-2 LM, error bars showing seed range" class="w-full rounded" />
-      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 2 — Best val PPL per activation on WikiText-2 LM (lower is better; error bars are seed min/max).</figcaption>
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 3 — Best val PPL per activation on WikiText-2 LM (lower is better; error bars are seed min/max).</figcaption>
     </figure>
 
     <div class="overflow-x-auto mb-4">
@@ -156,12 +233,12 @@ export const frontmatter = {
 
     <figure class="bg-white rounded border p-2 mb-2">
       <img src="/plots/act-bench/vision_cnn_best_metric_bar.png" alt="Best val top-1 on CIFAR-10 ResNet-20 across activations; SiLU is #1, Mish #2, GELU #3, tanh and scaled_tanh far behind" class="w-full rounded" />
-      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 3 — CIFAR-10 with ResNet-20 + BatchNorm. SiLU wins.</figcaption>
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 4 — CIFAR-10 with ResNet-20 + BatchNorm. SiLU wins.</figcaption>
     </figure>
 
     <figure class="bg-white rounded border p-2 mb-2">
       <img src="/plots/act-bench/vision_vit_best_metric_bar.png" alt="Best val top-1 on CIFAR-10 ViT-tiny across activations; SwiGLU is #1, GELU #2, ReLU #3, SiLU further down" class="w-full rounded" />
-      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 4 — CIFAR-10 with ViT-tiny + LayerNorm. SwiGLU wins, GELU second, SiLU falls to #6.</figcaption>
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 5 — CIFAR-10 with ViT-tiny + LayerNorm. SwiGLU wins, GELU second, SiLU falls to #6.</figcaption>
     </figure>
 
     <p class="text-gray-700 mb-3">SiLU goes from <b>rank 1 to rank 6</b> when I swap the block. That is not noise — the ResNet gap between SiLU (85.70%) and GELU (85.35%) is separated by 8 seeds' worth of tight variance, and the ViT gap between GELU (74.60%) and SiLU (72.04%) is 2.5 percentage points, an enormous swing for CIFAR-10.</p>
@@ -204,7 +281,7 @@ export const frontmatter = {
 
     <figure class="bg-white rounded border p-2 mb-2">
       <img src="/plots/act-bench/tanh_saturation_over_epochs.png" alt="Two-panel figure: fraction of pre-activations with |x|>4 (near-zero gradient) and fraction of post-activations with |y|>0.99 (saturated output) over training epochs; both numbers stay under 0.5%" class="w-full rounded" />
-      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 5 — Tanh saturation, measured. Only 0.4% of post-activations are saturated at end of training; 0.01% of pre-activations sit in the near-zero-gradient regime.</figcaption>
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 6 — Tanh saturation, measured. Only 0.4% of post-activations are saturated at end of training; 0.01% of pre-activations sit in the near-zero-gradient regime.</figcaption>
     </figure>
 
     <p class="text-gray-700 mb-3">Over training, the fraction of pre-activations in the near-flat gradient regime (|x| &gt; 4, where tanh'(x) &lt; 0.002) climbs from 0.00% to <b>0.01%</b> by the end. The fraction of post-activations pinned near ±1 (|y| &gt; 0.99) climbs to <b>0.4%</b>. Both are essentially zero. Almost none of the units are actually saturating.</p>
@@ -287,7 +364,7 @@ export const frontmatter = {
 
     <figure class="bg-white rounded border p-2 mb-2">
       <img src="/plots/act-bench/mechanism_correlation.png" alt="Bar chart of Spearman rank correlation between two probes (post-std and gradient L2) and activation rank, per task. On four transformer tasks, post-std is around +0.85 (higher std = worse rank) and gradient L2 is around -0.85. On vision_cnn (ResNet+BN), post-std drops to +0.14 and gradient L2 flips sign to +0.96." class="w-full rounded" />
-      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 6 — Spearman ρ(probe, rank) per task. On transformer FFNs, low post-std and high gradient L2 predict a winning activation. On CNN+BN, post-std stops predicting rank and gradient L2 flips sign.</figcaption>
+      <figcaption class="text-sm text-gray-500 px-2 pt-2">Fig. 7 — Spearman ρ(probe, rank) per task. On transformer FFNs, low post-std and high gradient L2 predict a winning activation. On CNN+BN, post-std stops predicting rank and gradient L2 flips sign.</figcaption>
     </figure>
 
     <p class="text-gray-700 mb-3">On every transformer task — the two LMs, the classifier, and the ViT — the pattern is the same:</p>
