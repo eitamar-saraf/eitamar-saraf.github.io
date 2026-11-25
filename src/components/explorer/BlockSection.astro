@@ -1,0 +1,73 @@
+---
+// One block of a model: where it sits (breadcrumb), what it does (the prose slot),
+// the exact code that ran, and the real tensors that went in and came out.
+import { Code } from 'astro:components';
+import TensorPreview from './TensorPreview.astro';
+import { breadcrumbTo, type FlowNode } from '../../data/models/flow';
+
+interface Props {
+  id: string;
+  title: string;
+  flow: FlowNode;
+  block: any;
+  level?: 2 | 3 | 4;
+}
+
+const { id, title, flow, block, level = 3 } = Astro.props;
+const breadcrumb = breadcrumbTo(flow, id).slice(0, -1);
+const Heading = `h${level}` as 'h2' | 'h3' | 'h4';
+const HEADING_CLASSES = {
+  2: 'text-3xl font-bold',
+  3: 'text-2xl font-bold',
+  4: 'text-xl font-semibold',
+};
+
+function formatParameters(count: number): string {
+  if (count >= 1e6) return `${(count / 1e6).toFixed(2)}M parameters`;
+  if (count >= 1e3) return `${(count / 1e3).toFixed(1)}K parameters`;
+  return `${count} parameters`;
+}
+---
+
+<section id={id} class="block-section" data-block-section={id}>
+  {breadcrumb.length > 0 && (
+    <nav class="mb-1 text-xs text-gray-500" aria-label="Where this block sits">
+      {breadcrumb.map((step) => (
+        <>
+          <a href={`#${step.target}`} class="hover:text-blue-700 hover:underline">{step.label}</a>
+          <span class="mx-1">›</span>
+        </>
+      ))}
+    </nav>
+  )}
+
+  <div class="mb-3 flex flex-wrap items-baseline gap-x-3">
+    <Heading class={HEADING_CLASSES[level]}>{title}</Heading>
+    {block.parameters > 0 && <span class="text-sm text-gray-500">{formatParameters(block.parameters)}</span>}
+  </div>
+
+  <div class="block-prose space-y-3 text-gray-700">
+    <slot />
+  </div>
+
+  <div class="mt-4 overflow-hidden rounded-lg border border-gray-200 text-sm">
+    <Code code={block.snippet} lang="python" theme="github-light" />
+  </div>
+
+  <div class="mt-4 grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-2">
+    <div class="min-w-0 rounded-lg border border-gray-200 bg-gray-50 p-3">
+      <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">In</p>
+      <div class="space-y-3">
+        {block.inputs.map((preview: any) => <TensorPreview preview={preview} />)}
+      </div>
+    </div>
+    <div class="min-w-0 rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+      <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-700">Out</p>
+      <div class="space-y-3">
+        {block.outputs.map((preview: any) => <TensorPreview preview={preview} />)}
+      </div>
+    </div>
+  </div>
+
+  <slot name="after" />
+</section>

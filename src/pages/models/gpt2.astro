@@ -1,0 +1,266 @@
+---
+import ModelExplorerLayout from '../../layouts/ModelExplorerLayout.astro';
+import BlockSection from '../../components/explorer/BlockSection.astro';
+import AttentionHeads from '../../components/explorer/AttentionHeads.astro';
+import { GPT2_FLOW } from '../../data/models/gpt2-flow';
+import data from '../../data/models/gpt2.json';
+
+const blocks = data.blocks as Record<string, any>;
+const flow = GPT2_FLOW;
+
+const percent = (probability: number) => `${(probability * 100).toFixed(1)}%`;
+const topCandidate = blocks['gpt2'].outputs[0].candidates[0];
+const layerNormIn = blocks['layer-norm'].inputs[0];
+const layerNormOut = blocks['layer-norm'].outputs[0];
+const finalNormIn = blocks['final-norm'].inputs[0];
+const range = (values: number[]) => `${Math.min(...values).toFixed(2)}–${Math.max(...values).toFixed(2)}`;
+const generationSteps = blocks['generate'].outputs[0].steps;
+---
+
+<ModelExplorerLayout
+  title="GPT-2, built from scratch"
+  description="GPT-2 124M rebuilt block by block in plain PyTorch, with the real tensors from one prompt at every step."
+  flow={flow}
+>
+  <header class="pt-2">
+    <p class="mb-2 text-sm font-semibold text-blue-700">Architectures from scratch · model 1</p>
+    <h1 class="mb-4 text-4xl font-bold">GPT-2, built from scratch</h1>
+    <p class="mb-4 text-lg text-gray-700">
+      GPT-2 is the baseline every later language model is described against. This page rebuilds the
+      124M-parameter version top-down: the whole model first, then each box opened up until nothing
+      is left but matrix multiplies.
+    </p>
+    <div class="mb-4 rounded-lg border bg-gray-50 p-4 text-sm text-gray-700">
+      <p class="mb-2"><b>How to read it.</b> The chart on the left is the model. Click any block to jump to it;
+      as you scroll, the chart shows where you are. Every block has the exact code that ran, and the real
+      tensors that went in and came out.</p>
+      <p class="mb-2"><b>One prompt, all the way through.</b> Every number below comes from feeding
+      <span class="font-mono">“{data.prompt}”</span> to GPT-2 with OpenAI's released weights. It continues
+      with <span class="font-mono">“{data.continuation}”</span>. Matrices show all {data.tokens.length} tokens but
+      only the first 6 of their columns; blocks inside the transformer are shown for layer {data.traced_layer}.</p>
+      <p><b>Checked, not assumed.</b> The code here loads the official weights and matches Hugging Face's GPT-2
+      to within {data.max_logit_difference_vs_hf.toExponential(0)} on every logit; greedy generation matches token
+      for token.</p>
+    </div>
+  </header>
+
+  <BlockSection id="gpt2" title="The whole model" flow={flow} block={blocks['gpt2']} level={2}>
+    <p>
+      From far away GPT-2 is one function: a list of token ids in, a score for every word in its vocabulary
+      out. Turn the text into ids, turn each id into a vector, push the vectors through 12 identical
+      transformer blocks, then score every possible next token.
+    </p>
+    <p>
+      The shape is the whole story. A sequence of <code>T</code> tokens becomes a <code>[T, 768]</code> matrix
+      — one 768-number row per token — and stays that shape through all 12 blocks. Only at the very end does
+      each row become 50,257 scores, one per vocabulary entry. For our prompt the top guess is
+      <span class="font-mono">“{topCandidate.text}”</span> at {percent(topCandidate.probability)}: the model is
+      unsure, and that spread is what it learned.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="tokenizer" title="Tokenizer" flow={flow} block={blocks['tokenizer']} level={2}>
+    <p>
+      The network never sees characters. A byte-pair-encoding (BPE) tokenizer cuts text into pieces from a
+      fixed vocabulary of 50,257 and replaces each piece with its index. Common words get one id, rare words
+      are split into several, and the leading space is part of the token — <code>" Turing"</code> and
+      <code>"Turing"</code> are different ids.
+    </p>
+    <p>
+      This is the one block not written from scratch: it is OpenAI's own tokenizer via <code>tiktoken</code>,
+      because the weights only make sense with the exact vocabulary they were trained on.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="embeddings" title="Token + position embedding" flow={flow} block={blocks['embeddings']} level={2}>
+    <p>
+      Two lookup tables. The token table has one learned 768-number row per vocabulary entry; the position
+      table has one per position, 0 to 1023. Each token's vector is its token row plus its position row.
+    </p>
+    <p>
+      The addition is the only place GPT-2 learns where a token is. Without it, attention would see a bag of
+      words — “dog bites man” and “man bites dog” would look the same. Later models replace this table with
+      rotations inside attention (RoPE, in the Llama page).
+    </p>
+  </BlockSection>
+
+  <BlockSection id="transformer-block" title="Transformer block" flow={flow} block={blocks['transformer-block']} level={2}>
+    <p>
+      The block is two steps, each wrapped the same way. <b>Attention</b> lets every token gather information
+      from the tokens before it. The <b>MLP</b> then transforms each token on its own. Before each step a
+      LayerNorm rescales the input; after each, the step's output is <em>added</em> to what came in.
+    </p>
+    <p>
+      That “normalise, transform, add back” wrapper is called pre-norm residual, and it is why the block can
+      be stacked 12 times: the input passes through untouched on the skip path, and each block only writes a
+      correction on top. GPT-2 repeats this block 12 times with separate weights, and 85 of its 124 million
+      parameters live here.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="layer-norm" title="LayerNorm" flow={flow} block={blocks['layer-norm']} level={3}>
+    <p>
+      For each token separately: subtract the mean of its 768 numbers, divide by their standard deviation,
+      then apply a learned per-feature <code>scale</code> and <code>shift</code>. The sublayer that follows
+      always sees inputs of a predictable size, however large the running sum on the skip path has become.
+    </p>
+    <p>
+      The row statistics show both halves. Going in, each token's standard deviation is
+      {range(layerNormIn.row_stds)}. Normalising gives every row mean 0 and standard deviation 1; the learned scale then
+      shrinks them to {range(layerNormOut.row_stds)} — this layer was trained to keep its input to attention
+      small. The same block appears twice per transformer block and once more at the very end.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="attention" title="Causal self-attention" flow={flow} block={blocks['attention']} level={3}>
+    <p>
+      Attention is the only place tokens exchange information. Each token asks a question (its
+      <b>query</b>), advertises what it contains (its <b>key</b>), and offers something to pass on (its
+      <b>value</b>). A token's output is a weighted average of the values of the tokens it may see, weighted
+      by how well its query matches their keys.
+    </p>
+    <p>
+      “Causal” means a token may only look backwards: when predicting what follows <code>" was"</code>, the
+      model must not peek at <code>" a"</code>. GPT-2 runs 12 of these attention patterns in parallel
+      (heads), each in its own 64-dimensional slice. The seven steps below are the whole of it.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="qkv-projection" title="Q, K, V projection" flow={flow} block={blocks['qkv-projection']} level={4}>
+    <p>
+      One linear layer, <code>768 → 2304</code>, then cut into three equal pieces. It is three separate
+      projections fused into one matrix multiply: queries, keys and values are each a different learned view
+      of the same token.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="split-heads" title="Split into 12 heads" flow={flow} block={blocks['split-heads']} level={4}>
+    <p>
+      No arithmetic here, only a reshape. Each token's 768 numbers are read as 12 groups of 64, and the head
+      axis moves to the front, so <code>[T, 768]</code> becomes <code>[12, T, 64]</code>. From here on every
+      operation runs on all 12 heads at once, and each head attends independently.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="attention-scores" title="Scores: Q·Kᵀ / √64" flow={flow} block={blocks['attention-scores']} level={4}>
+    <p>
+      Every query is dotted with every key, giving a <code>[T, T]</code> grid per head: row <i>i</i>, column
+      <i>j</i> is how relevant token <i>j</i> looks to token <i>i</i>. Dividing by √64 = 8 keeps the scores
+      from growing with the head size, which would push the softmax into giving all its weight to one token.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="causal-mask" title="Causal mask" flow={flow} block={blocks['causal-mask']} level={4}>
+    <p>
+      Every score above the diagonal — a token looking at a later token — is set to −∞. After the softmax that
+      becomes a weight of exactly zero. This one line is what makes GPT-2 a left-to-right model, and it is
+      also why it can be trained on every position of a sequence at once.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="softmax" title="Softmax" flow={flow} block={blocks['softmax']} level={4}>
+    <p>
+      Each row of scores becomes a probability distribution: exponentiate, then divide by the row's sum. The
+      first token can only see itself, so its row is always <code>[1, 0, 0, 0]</code>.
+    </p>
+    <p>
+      The 12 heads learn very different habits, even in the first layer. Some put almost all their weight on
+      the current token; others spread it back over the whole prompt. All 12 are drawn below the tensors.
+    </p>
+    <AttentionHeads slot="after" weights={data.attention_weights_all_heads} numHeads={data.num_heads}
+      tokens={data.tokens} layer={data.traced_layer} />
+  </BlockSection>
+
+  <BlockSection id="weighted-sum" title="Weighted sum of V" flow={flow} block={blocks['weighted-sum']} level={4}>
+    <p>
+      Multiply the weights by the values: each token's output in this head is the mix of earlier tokens'
+      values that its weights asked for. This is where information actually moves between positions.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="merge-heads" title="Merge heads + output projection" flow={flow} block={blocks['merge-heads']} level={4}>
+    <p>
+      Undo the split — put the 12 heads' 64-number outputs side by side to get back <code>[T, 768]</code> —
+      then one more linear layer, <code>768 → 768</code>, which mixes what the heads found and writes the
+      result in the residual stream's coordinates.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="residual" title="Residual add" flow={flow} block={blocks['residual']} level={3}>
+    <p>
+      The sublayer's output is added to its input rather than replacing it. Two consequences. Gradients have
+      a direct path from the loss to every layer, which is what makes a 12-deep stack trainable. And the
+      hidden state becomes a shared “residual stream” that every block reads from and writes into.
+    </p>
+    <p>
+      Because blocks only ever add, the stream grows. By the end of layer 11 our tokens' standard deviations
+      are {range(finalNormIn.row_stds)}, against {range(layerNormIn.row_stds)} going into layer 0 — which is
+      why every sublayer, and the output, needs a LayerNorm in front.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="mlp" title="MLP" flow={flow} block={blocks['mlp']} level={3}>
+    <p>
+      The second half of the block works on each token alone: widen to 3072, apply a non-linearity, narrow
+      back to 768. Attention moves information between tokens; the MLP is where most of the per-token
+      computation — and two thirds of each block's parameters — lives.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="up-projection" title="Linear 768 → 3072" flow={flow} block={blocks['up-projection']} level={4}>
+    <p>
+      A plain linear layer, <code>x·Wᵀ + b</code>, into a space four times wider. The extra width gives the
+      non-linearity many separate features to switch on and off.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="gelu" title="GELU" flow={flow} block={blocks['gelu']} level={4}>
+    <p>
+      GELU is close to ReLU — large positive values pass through, large negative values go to zero — but
+      smooth around zero and slightly negative just below it. GPT-2 uses this tanh approximation of
+      <code>x·Φ(x)</code>; compare the in and out columns to see negative values squashed toward 0.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="down-projection" title="Linear 3072 → 768" flow={flow} block={blocks['down-projection']} level={4}>
+    <p>
+      Back to the residual stream's width, so the result can be added to it.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="final-norm" title="Final LayerNorm" flow={flow} block={blocks['final-norm']} level={2}>
+    <p>
+      The same <a href="#layer-norm" class="text-blue-700 hover:underline">LayerNorm</a>, applied once after
+      the last block. Going in, the residual stream has grown to standard deviations of
+      {range(finalNormIn.row_stds)}; coming out, it is back to a fixed scale for the output layer.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="lm-head" title="LM head (tied to the embedding)" flow={flow} block={blocks['lm-head']} level={2}>
+    <p>
+      To score the vocabulary, GPT-2 reuses the token-embedding table: each token's score is the dot product
+      of the final hidden vector with that token's embedding. Nothing new is learned here — the input and
+      output share one 38.6M-parameter matrix (“weight tying”), which is why this block shows no parameters.
+    </p>
+    <p>
+      The model predicts at every position at once, not only the last. After <code>" was"</code> it expects
+      <code>" a"</code>, which is the token that actually came next. During training every position is a
+      prediction with a loss; at generation time only the last row is used.
+    </p>
+  </BlockSection>
+
+  <BlockSection id="generate" title="Pick a token, repeat" flow={flow} block={blocks['generate']} level={2}>
+    <p>
+      Generation is a loop around the whole model: take the scores after the last token, pick one, append it,
+      run again. This page uses the simplest rule, greedy — always the top token — so the output is
+      deterministic. Its first pick, <span class="font-mono">“{generationSteps[0].text}”</span>, was only
+      {percent(generationSteps[0].probability)} likely; once it is in the context, the next pick,
+      <span class="font-mono">“{generationSteps[1].text}”</span>, gets {percent(generationSteps[1].probability)}.
+    </p>
+    <p>
+      Note what this loop does not do: remember anything between steps. Every iteration recomputes all
+      tokens from scratch. Real implementations cache each layer's keys and values instead (the KV cache),
+      which changes the cost, not the result.
+    </p>
+  </BlockSection>
+</ModelExplorerLayout>

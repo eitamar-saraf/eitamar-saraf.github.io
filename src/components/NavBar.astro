@@ -1,8 +1,17 @@
+---
+const LINKS = [
+  { href: '/', label: 'Home' },
+  { href: '/models', label: 'Models' },
+  { href: '/blog', label: 'Blog' },
+  { href: '/projects', label: 'Projects' },
+  { href: '/cv', label: 'CV' },
+];
+---
+
 <nav class="w-full border-b mb-8 bg-white flex items-center justify-center sticky top-0 z-50" style="height:120px;">
-  <div class="flex gap-12 font-mono text-lg text-gray-800">
-    <a href="/" class="px-2 py-1 hover:underline underline-offset-4 decoration-2">Home</a>
-  <a href="/blog" class="px-2 py-1 hover:underline underline-offset-4 decoration-2">Blog</a>
-    <a href="/projects" class="px-2 py-1 hover:underline underline-offset-4 decoration-2">Projects</a>
-    <a href="/cv" class="px-2 py-1 hover:underline underline-offset-4 decoration-2">CV</a>
+  <div class="flex flex-wrap justify-center gap-x-3 gap-y-1 px-2 font-mono text-base text-gray-800 sm:gap-12 sm:text-lg">
+    {LINKS.map((link) => (
+      <a href={link.href} class="px-2 py-1 hover:underline underline-offset-4 decoration-2">{link.label}</a>
+    ))}
   </div>
 </nav>

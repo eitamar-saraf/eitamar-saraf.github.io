@@ -1,0 +1,138 @@
+---
+// Shows one recorded tensor (or token list, or prediction list) from the export.
+// Matrices show every token row and the first few feature columns; cells are tinted
+// blue for positive and orange for negative, scaled to the largest value shown.
+interface Props {
+  preview: any;
+}
+
+const { preview } = Astro.props;
+const NEGATIVE_INFINITY = '−∞';
+
+function formatShape(shape: number[] | undefined): string {
+  return shape ? `[${shape.join(', ')}]` : '';
+}
+
+function formatNumber(value: number | null): string {
+  if (value === null) return NEGATIVE_INFINITY;
+  return value.toFixed(3);
+}
+
+function largestMagnitude(rows: (number | null)[][]): number {
+  const magnitudes = rows.flat().filter((v): v is number => v !== null).map(Math.abs);
+  return Math.max(...magnitudes, 1e-9);
+}
+
+function heatStyle(value: number | null, scale: number): string {
+  if (value === null) return 'background:#f3f4f6;color:#9ca3af';
+  const strength = Math.min(Math.abs(value) / scale, 1) * 0.55;
+  const rgb = value >= 0 ? '42,120,214' : '235,104,52';
+  return `background:rgba(${rgb},${strength.toFixed(3)})`;
+}
+
+function percent(probability: number): string {
+  return `${(probability * 100).toFixed(1)}%`;
+}
+
+function showToken(text: string): string {
+  return JSON.stringify(text).slice(1, -1).replaceAll(' ', '␣');
+}
+
+const scale = preview.values ? largestMagnitude(preview.values) : 1;
+const largestProbability = preview.candidates ? preview.candidates[0].probability : 1;
+---
+
+<div class="tensor-preview">
+  <div class="mb-1 flex flex-wrap items-baseline gap-x-2 text-xs">
+    <span class="font-semibold text-gray-800">{preview.name}</span>
+    {preview.shape && <span class="font-mono text-blue-700">{formatShape(preview.shape)}</span>}
+    {preview.note && <span class="text-gray-500">{preview.note}</span>}
+  </div>
+
+  {preview.kind === 'text' && (
+    <p class="font-mono text-sm text-gray-900">“{preview.text}”</p>
+  )}
+
+  {preview.kind === 'tokens' && (
+    <div class="flex flex-wrap gap-1.5">
+      {preview.tokens.map((token: any) => (
+        <span class="inline-flex flex-col items-center rounded border border-gray-200 bg-white px-2 py-1">
+          <span class="font-mono text-sm text-gray-900">{showToken(token.text)}</span>
+          <span class="font-mono text-[11px] text-blue-700">{token.id}</span>
+        </span>
+      ))}
+    </div>
+  )}
+
+  {(preview.kind === 'matrix' || preview.kind === 'square') && (
+    <div class="overflow-x-auto">
+      <table class="font-mono text-[11px] leading-tight">
+        {preview.column_labels && (
+          <thead>
+            <tr>
+              <th></th>
+              {preview.column_labels.map((label: string) => (
+                <th class="px-1.5 pb-1 text-right font-normal text-gray-500">{showToken(label)}</th>
+              ))}
+            </tr>
+          </thead>
+        )}
+        <tbody>
+          {preview.values.map((row: (number | null)[], rowIndex: number) => (
+            <tr>
+              <th class="pr-2 text-left font-normal text-gray-600 whitespace-nowrap">{showToken(preview.row_labels[rowIndex])}</th>
+              {row.map((value) => (
+                <td class="px-1.5 py-0.5 text-right tabular-nums" style={heatStyle(value, scale)}>{formatNumber(value)}</td>
+              ))}
+              {preview.hidden_columns > 0 && (
+                <td class="pl-1.5 text-gray-400 whitespace-nowrap">… +{preview.hidden_columns}</td>
+              )}
+              {preview.row_means && (
+                <td class="pl-3 text-gray-600 whitespace-nowrap">μ {formatNumber(preview.row_means[rowIndex])} · σ {formatNumber(preview.row_stds[rowIndex])}</td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+
+  {preview.kind === 'top_tokens' && (
+    <ul class="space-y-0.5">
+      {preview.candidates.map((candidate: any) => (
+        <li class="flex items-center gap-2 text-xs">
+          <span class="w-28 truncate font-mono text-gray-900">{showToken(candidate.text)}</span>
+          <span class="h-2.5 rounded-sm bg-blue-600" style={`width:${(candidate.probability / largestProbability) * 9}rem`}></span>
+          <span class="font-mono text-gray-600">{percent(candidate.probability)}</span>
+        </li>
+      ))}
+    </ul>
+  )}
+
+  {preview.kind === 'predictions' && (
+    <table class="text-xs">
+      <tbody>
+        {preview.rows.map((row: any) => (
+          <tr>
+            <td class="pr-2 text-gray-500">after</td>
+            <td class="pr-3 font-mono text-gray-900">{showToken(row.after)}</td>
+            <td class="pr-2 text-gray-500">→</td>
+            <td class="pr-3 font-mono font-semibold text-blue-700">{showToken(row.predicted)}</td>
+            <td class="font-mono text-gray-500">{percent(row.probability)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )}
+
+  {preview.kind === 'steps' && (
+    <ol class="flex flex-wrap gap-1.5">
+      {preview.steps.map((step: any, index: number) => (
+        <li class="inline-flex flex-col items-center rounded border border-gray-200 bg-white px-2 py-1">
+          <span class="font-mono text-sm text-gray-900">{showToken(step.text)}</span>
+          <span class="font-mono text-[11px] text-gray-500">#{index + 1} · {percent(step.probability)}</span>
+        </li>
+      ))}
+    </ol>
+  )}
+</div>

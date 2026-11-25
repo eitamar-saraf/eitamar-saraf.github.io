@@ -1,0 +1,51 @@
+---
+// All attention heads of one layer side by side, as small heatmaps. Row = the token
+// doing the looking, column = the token being looked at, darker = more weight.
+interface Props {
+  weights: number[][];
+  numHeads: number;
+  tokens: string[];
+  layer: number;
+}
+
+const { weights, numHeads, tokens, layer } = Astro.props;
+const tokensPerHead = tokens.length;
+const heads = Array.from({ length: numHeads }, (_, head) =>
+  weights.slice(head * tokensPerHead, (head + 1) * tokensPerHead),
+);
+
+function isFuture(row: number, column: number): boolean {
+  return column > row;
+}
+
+function cellStyle(row: number, column: number, weight: number): string {
+  if (isFuture(row, column)) return 'background:#f3f4f6';
+  return `background:rgba(42,120,214,${(0.06 + weight * 0.94).toFixed(3)})`;
+}
+
+function cellTitle(row: number, column: number, weight: number): string {
+  if (isFuture(row, column)) return `${tokens[row]} cannot see ${tokens[column]} (future)`;
+  return `${tokens[row]} → ${tokens[column]}: ${(weight * 100).toFixed(1)}%`;
+}
+---
+
+<figure class="mt-4 rounded-lg border border-gray-200 bg-white p-3">
+  <figcaption class="mb-2 text-xs text-gray-600">
+    All {numHeads} heads of layer {layer}. Rows: the token doing the looking
+    ({tokens.map((t) => JSON.stringify(t)).join(', ')}). Columns: what it looks at. Hover a cell for the number.
+  </figcaption>
+  <div class="grid grid-cols-4 gap-3 sm:grid-cols-6">
+    {heads.map((head, headIndex) => (
+      <div>
+        <div class="grid gap-px" style={`grid-template-columns:repeat(${tokensPerHead},minmax(0,1fr))`}>
+          {head.map((row, rowIndex) =>
+            row.map((weight, columnIndex) => (
+              <span class="aspect-square" style={cellStyle(rowIndex, columnIndex, weight)} title={cellTitle(rowIndex, columnIndex, weight)}></span>
+            )),
+          )}
+        </div>
+        <p class="mt-1 text-center text-[11px] text-gray-500">head {headIndex}</p>
+      </div>
+    ))}
+  </div>
+</figure>

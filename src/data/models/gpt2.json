@@ -1,0 +1,2842 @@
+{
+ "prompt": "Alan Turing was a",
+ "continuation": " brilliant mathematician, and he was a great friend of",
+ "tokens": [
+  "Alan",
+  " Turing",
+  " was",
+  " a"
+ ],
+ "traced_layer": 0,
+ "max_logit_difference_vs_hf": 5.340576171875e-05,
+ "attention_weights_all_heads": [
+  [
+   1.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   0.53,
+   0.47,
+   0.0,
+   0.0
+  ],
+  [
+   0.414,
+   0.22,
+   0.365,
+   0.0
+  ],
+  [
+   0.511,
+   0.293,
+   0.124,
+   0.072
+  ],
+  [
+   1.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   0.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  [
+   0.003,
+   0.02,
+   0.978,
+   0.0
+  ],
+  [
+   0.004,
+   0.003,
+   0.001,
+   0.993
+  ],
+  [
+   1.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   0.556,
+   0.444,
+   0.0,
+   0.0
+  ],
+  [
+   0.503,
+   0.251,
+   0.246,
+   0.0
+  ],
+  [
+   0.406,
+   0.289,
+   0.222,
+   0.083
+  ],
+  [
+   1.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   0.022,
+   0.978,
+   0.0,
+   0.0
+  ],
+  [
+   0.081,
+   0.148,
+   0.771,
+   0.0
+  ],
+  [
+   0.081,
+   0.086,
+   0.207,
+   0.626
+  ],
+  [
+   1.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   0.204,
+   0.796,
+   0.0,
+   0.0
+  ],
+  [
+   0.659,
+   0.198,
+   0.143,
+   0.0
+  ],
+  [
+   0.293,
+   0.195,
+   0.308,
+   0.204
+  ],
+  [
+   1.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   0.007,
+   0.993,
+   0.0,
+   0.0
+  ],
+  [
+   0.07,
+   0.007,
+   0.922,
+   0.0
+  ],
+  [
+   0.08,
+   0.025,
+   0.083,
+   0.811
+  ],
+  [
+   1.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   0.777,
+   0.223,
+   0.0,
+   0.0
+  ],
+  [
+   0.561,
+   0.422,
+   0.016,
+   0.0
+  ],
+  [
+   0.515,
+   0.426,
+   0.046,
+   0.013
+  ],
+  [
+   1.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   0.998,
+   0.002,
+   0.0,
+   0.0
+  ],
+  [
+   0.475,
+   0.365,
+   0.16,
+   0.0
+  ],
+  [
+   0.211,
+   0.201,
+   0.312,
+   0.275
+  ],
+  [
+   1.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   0.783,
+   0.217,
+   0.0,
+   0.0
+  ],
+  [
+   0.258,
+   0.114,
+   0.628,
+   0.0
+  ],
+  [
+   0.033,
+   0.03,
+   0.246,
+   0.69
+  ],
+  [
+   1.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   0.929,
+   0.071,
+   0.0,
+   0.0
+  ],
+  [
+   0.5,
+   0.217,
+   0.283,
+   0.0
+  ],
+  [
+   0.381,
+   0.158,
+   0.21,
+   0.251
+  ],
+  [
+   1.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   0.576,
+   0.424,
+   0.0,
+   0.0
+  ],
+  [
+   0.436,
+   0.161,
+   0.402,
+   0.0
+  ],
+  [
+   0.411,
+   0.123,
+   0.144,
+   0.323
+  ],
+  [
+   1.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   0.56,
+   0.44,
+   0.0,
+   0.0
+  ],
+  [
+   0.552,
+   0.17,
+   0.278,
+   0.0
+  ],
+  [
+   0.45,
+   0.17,
+   0.182,
+   0.198
+  ]
+ ],
+ "num_heads": 12,
+ "blocks": {
+  "gpt2": {
+   "snippet": "class GPT2(nn.Module):\n    def __init__(self, config: GPT2Config):\n        super().__init__()\n        self.config = config\n        self.embeddings = Embeddings(config)\n        self.blocks = nn.ModuleList(TransformerBlock(config) for _ in range(config.num_layers))\n        self.final_norm = LayerNorm(config.embedding_dim, config.layer_norm_eps)\n        self.lm_head = LMHead(self.embeddings.token_embedding)\n\n    def forward(self, token_ids: torch.Tensor) -> torch.Tensor:\n        hidden = self.embeddings(token_ids)      # [T] -> [T, 768]\n        for block in self.blocks:\n            hidden = block(hidden)               # [T, 768] -> [T, 768], 12 times\n        hidden = self.final_norm(hidden)         # [T, 768]\n        return self.lm_head(hidden)              # [T, 768] -> [T, 50257]",
+   "parameters": 124439808,
+   "inputs": [
+    {
+     "kind": "text",
+     "name": "prompt",
+     "text": "Alan Turing was a"
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "top_tokens",
+     "name": "next-token probabilities",
+     "shape": [
+      4,
+      50257
+     ],
+     "note": "after the last token, ' a'",
+     "candidates": [
+      {
+       "text": " brilliant",
+       "probability": 0.0403
+      },
+      {
+       "text": " man",
+       "probability": 0.024
+      },
+      {
+       "text": " mathematician",
+       "probability": 0.0238
+      },
+      {
+       "text": " British",
+       "probability": 0.0165
+      },
+      {
+       "text": " great",
+       "probability": 0.0165
+      },
+      {
+       "text": " physicist",
+       "probability": 0.0162
+      },
+      {
+       "text": " pioneer",
+       "probability": 0.0152
+      },
+      {
+       "text": " genius",
+       "probability": 0.0137
+      }
+     ]
+    }
+   ]
+  },
+  "tokenizer": {
+   "snippet": "GPT2_ENCODING = tiktoken.get_encoding(\"gpt2\")\n\n\ndef tokenize(text: str) -> torch.Tensor:\n    return torch.tensor(GPT2_ENCODING.encode(text))\n\ndef detokenize(token_ids: torch.Tensor) -> str:\n    return GPT2_ENCODING.decode(token_ids.tolist())",
+   "parameters": null,
+   "inputs": [
+    {
+     "kind": "text",
+     "name": "text",
+     "text": "Alan Turing was a"
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "tokens",
+     "name": "token ids",
+     "shape": [
+      4
+     ],
+     "tokens": [
+      {
+       "id": 36235,
+       "text": "Alan"
+      },
+      {
+       "id": 39141,
+       "text": " Turing"
+      },
+      {
+       "id": 373,
+       "text": " was"
+      },
+      {
+       "id": 257,
+       "text": " a"
+      }
+     ]
+    }
+   ]
+  },
+  "embeddings": {
+   "snippet": "class Embeddings(nn.Module):\n    def __init__(self, config: GPT2Config):\n        super().__init__()\n        self.token_embedding = nn.Embedding(config.vocab_size, config.embedding_dim)\n        self.position_embedding = nn.Embedding(config.context_length, config.embedding_dim)\n\n    def forward(self, token_ids: torch.Tensor) -> torch.Tensor:\n        positions = torch.arange(len(token_ids))\n        return self.token_embedding(token_ids) + self.position_embedding(positions)",
+   "parameters": 39383808,
+   "inputs": [
+    {
+     "kind": "tokens",
+     "name": "token ids",
+     "shape": [
+      4
+     ],
+     "tokens": [
+      {
+       "id": 36235,
+       "text": "Alan"
+      },
+      {
+       "id": 39141,
+       "text": " Turing"
+      },
+      {
+       "id": 373,
+       "text": " was"
+      },
+      {
+       "id": 257,
+       "text": " a"
+      }
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "matrix",
+     "name": "token embedding",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.045,
+       -0.152,
+       0.109,
+       -0.044,
+       -0.126,
+       0.053
+      ],
+      [
+       -0.144,
+       -0.13,
+       -0.007,
+       -0.101,
+       -0.029,
+       0.033
+      ],
+      [
+       -0.074,
+       -0.084,
+       0.181,
+       -0.107,
+       -0.085,
+       0.056
+      ],
+      [
+       -0.051,
+       0.006,
+       0.047,
+       -0.059,
+       -0.063,
+       -0.03
+      ]
+     ],
+     "hidden_columns": 762
+    },
+    {
+     "kind": "matrix",
+     "name": "position embedding",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       -0.019,
+       -0.197,
+       0.004,
+       0.011,
+       0.064,
+       -0.105
+      ],
+      [
+       0.024,
+       -0.054,
+       -0.095,
+       -0.013,
+       -0.01,
+       0.031
+      ],
+      [
+       0.004,
+       -0.085,
+       0.055,
+       -0.005,
+       -0.026,
+       0.015
+      ],
+      [
+       -0.0,
+       -0.074,
+       0.106,
+       0.001,
+       -0.016,
+       0.011
+      ]
+     ],
+     "hidden_columns": 762
+    },
+    {
+     "kind": "matrix",
+     "name": "sum = hidden",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.026,
+       -0.35,
+       0.113,
+       -0.033,
+       -0.062,
+       -0.052
+      ],
+      [
+       -0.12,
+       -0.184,
+       -0.102,
+       -0.114,
+       -0.039,
+       0.064
+      ],
+      [
+       -0.069,
+       -0.169,
+       0.236,
+       -0.111,
+       -0.111,
+       0.072
+      ],
+      [
+       -0.051,
+       -0.068,
+       0.153,
+       -0.059,
+       -0.078,
+       -0.02
+      ]
+     ],
+     "hidden_columns": 762
+    }
+   ]
+  },
+  "transformer-block": {
+   "snippet": "class TransformerBlock(nn.Module):\n    def __init__(self, config: GPT2Config):\n        super().__init__()\n        self.attention_norm = LayerNorm(config.embedding_dim, config.layer_norm_eps)\n        self.attention = CausalSelfAttention(config)\n        self.mlp_norm = LayerNorm(config.embedding_dim, config.layer_norm_eps)\n        self.mlp = MLP(config)\n\n    def forward(self, hidden: torch.Tensor) -> torch.Tensor:\n        hidden = hidden + self.attention(self.attention_norm(hidden))\n        hidden = hidden + self.mlp(self.mlp_norm(hidden))\n        return hidden",
+   "parameters": 7087872,
+   "inputs": [
+    {
+     "kind": "matrix",
+     "name": "hidden",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.026,
+       -0.35,
+       0.113,
+       -0.033,
+       -0.062,
+       -0.052
+      ],
+      [
+       -0.12,
+       -0.184,
+       -0.102,
+       -0.114,
+       -0.039,
+       0.064
+      ],
+      [
+       -0.069,
+       -0.169,
+       0.236,
+       -0.111,
+       -0.111,
+       0.072
+      ],
+      [
+       -0.051,
+       -0.068,
+       0.153,
+       -0.059,
+       -0.078,
+       -0.02
+      ]
+     ],
+     "hidden_columns": 762
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "matrix",
+     "name": "hidden",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.331,
+       -1.628,
+       -0.047,
+       -0.762,
+       -0.297,
+       -0.03
+      ],
+      [
+       -0.65,
+       -1.84,
+       1.922,
+       -2.391,
+       -1.569,
+       1.649
+      ],
+      [
+       -1.81,
+       -1.344,
+       0.937,
+       0.295,
+       -0.257,
+       0.55
+      ],
+      [
+       -1.292,
+       -0.026,
+       0.421,
+       -0.895,
+       -0.214,
+       -0.249
+      ]
+     ],
+     "hidden_columns": 762
+    }
+   ]
+  },
+  "layer-norm": {
+   "snippet": "class LayerNorm(nn.Module):\n    def __init__(self, dim: int, eps: float):\n        super().__init__()\n        self.scale = nn.Parameter(torch.ones(dim))\n        self.shift = nn.Parameter(torch.zeros(dim))\n        self.eps = eps\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        mean = x.mean(dim=-1, keepdim=True)\n        variance = x.var(dim=-1, keepdim=True, unbiased=False)\n        normalized = (x - mean) / torch.sqrt(variance + self.eps)\n        return self.scale * normalized + self.shift",
+   "parameters": 1536,
+   "inputs": [
+    {
+     "kind": "matrix",
+     "name": "hidden",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.026,
+       -0.35,
+       0.113,
+       -0.033,
+       -0.062,
+       -0.052
+      ],
+      [
+       -0.12,
+       -0.184,
+       -0.102,
+       -0.114,
+       -0.039,
+       0.064
+      ],
+      [
+       -0.069,
+       -0.169,
+       0.236,
+       -0.111,
+       -0.111,
+       0.072
+      ],
+      [
+       -0.051,
+       -0.068,
+       0.153,
+       -0.059,
+       -0.078,
+       -0.02
+      ]
+     ],
+     "hidden_columns": 762,
+     "row_means": [
+      -0.005,
+      0.001,
+      -0.004,
+      -0.003
+     ],
+     "row_stds": [
+      0.375,
+      0.247,
+      0.19,
+      0.183
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "matrix",
+     "name": "normalized",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.015,
+       -0.14,
+       -0.016,
+       -0.019,
+       -0.047,
+       -0.036
+      ],
+      [
+       -0.112,
+       -0.109,
+       -0.128,
+       -0.094,
+       -0.049,
+       0.038
+      ],
+      [
+       -0.08,
+       -0.13,
+       0.13,
+       -0.113,
+       -0.13,
+       0.066
+      ],
+      [
+       -0.062,
+       -0.037,
+       0.066,
+       -0.063,
+       -0.099,
+       -0.029
+      ]
+     ],
+     "hidden_columns": 762,
+     "row_means": [
+      -0.005,
+      -0.005,
+      -0.005,
+      -0.005
+     ],
+     "row_stds": [
+      0.083,
+      0.13,
+      0.091,
+      0.088
+     ]
+    }
+   ]
+  },
+  "attention": {
+   "snippet": "class CausalSelfAttention(nn.Module):\n    def __init__(self, config: GPT2Config):\n        super().__init__()\n        self.num_heads = config.num_heads\n        self.qkv_projection = nn.Linear(config.embedding_dim, 3 * config.embedding_dim)\n        self.output_projection = nn.Linear(config.embedding_dim, config.embedding_dim)\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        queries, keys, values = self.qkv_projection(x).chunk(3, dim=-1)    # 3 x [T, 768]\n        queries = split_heads(queries, self.num_heads)                      # [12, T, 64]\n        keys = split_heads(keys, self.num_heads)\n        values = split_heads(values, self.num_heads)\n        weights = attention_weights(queries, keys)                          # [12, T, T]\n        per_head_output = weights @ values                                  # [12, T, 64]\n        return self.output_projection(merge_heads(per_head_output))         # [T, 768]",
+   "parameters": 2362368,
+   "inputs": [
+    {
+     "kind": "matrix",
+     "name": "x",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.015,
+       -0.14,
+       -0.016,
+       -0.019,
+       -0.047,
+       -0.036
+      ],
+      [
+       -0.112,
+       -0.109,
+       -0.128,
+       -0.094,
+       -0.049,
+       0.038
+      ],
+      [
+       -0.08,
+       -0.13,
+       0.13,
+       -0.113,
+       -0.13,
+       0.066
+      ],
+      [
+       -0.062,
+       -0.037,
+       0.066,
+       -0.063,
+       -0.099,
+       -0.029
+      ]
+     ],
+     "hidden_columns": 762
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "matrix",
+     "name": "attention output",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       -0.217,
+       -1.537,
+       0.786,
+       -0.017,
+       0.036,
+       -0.045
+      ],
+      [
+       -0.969,
+       -2.023,
+       0.772,
+       -0.032,
+       0.044,
+       0.027
+      ],
+      [
+       -1.13,
+       -1.361,
+       0.946,
+       -0.026,
+       0.126,
+       -0.014
+      ],
+      [
+       -0.792,
+       -0.634,
+       0.383,
+       -0.007,
+       0.048,
+       -0.084
+      ]
+     ],
+     "hidden_columns": 762
+    }
+   ]
+  },
+  "qkv-projection": {
+   "snippet": "queries, keys, values = self.qkv_projection(x).chunk(3, dim=-1)    # 3 x [T, 768]",
+   "parameters": 1771776,
+   "inputs": [
+    {
+     "kind": "matrix",
+     "name": "x",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.015,
+       -0.14,
+       -0.016,
+       -0.019,
+       -0.047,
+       -0.036
+      ],
+      [
+       -0.112,
+       -0.109,
+       -0.128,
+       -0.094,
+       -0.049,
+       0.038
+      ],
+      [
+       -0.08,
+       -0.13,
+       0.13,
+       -0.113,
+       -0.13,
+       0.066
+      ],
+      [
+       -0.062,
+       -0.037,
+       0.066,
+       -0.063,
+       -0.099,
+       -0.029
+      ]
+     ],
+     "hidden_columns": 762
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "matrix",
+     "name": "queries",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.01,
+       0.228,
+       -0.713,
+       -0.978,
+       -0.336,
+       0.817
+      ],
+      [
+       1.334,
+       2.011,
+       -0.263,
+       0.277,
+       -0.441,
+       -0.743
+      ],
+      [
+       0.657,
+       -0.862,
+       0.854,
+       -0.872,
+       -0.728,
+       -0.637
+      ],
+      [
+       0.894,
+       -0.639,
+       0.717,
+       -0.498,
+       -0.934,
+       -0.294
+      ]
+     ],
+     "hidden_columns": 762
+    },
+    {
+     "kind": "matrix",
+     "name": "keys",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       -1.315,
+       1.838,
+       0.449,
+       -0.392,
+       0.775,
+       0.876
+      ],
+      [
+       -0.596,
+       1.873,
+       1.074,
+       -1.273,
+       -0.177,
+       0.587
+      ],
+      [
+       -1.862,
+       2.182,
+       2.029,
+       0.184,
+       2.172,
+       0.032
+      ],
+      [
+       -2.368,
+       2.732,
+       1.643,
+       0.063,
+       1.234,
+       0.884
+      ]
+     ],
+     "hidden_columns": 762
+    },
+    {
+     "kind": "matrix",
+     "name": "values",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       -0.063,
+       0.124,
+       0.022,
+       0.019,
+       0.019,
+       -0.372
+      ],
+      [
+       -0.064,
+       0.478,
+       0.068,
+       0.17,
+       -0.069,
+       -0.688
+      ],
+      [
+       0.166,
+       -0.394,
+       0.009,
+       0.05,
+       0.214,
+       0.362
+      ],
+      [
+       -0.049,
+       0.023,
+       -0.051,
+       0.117,
+       -0.107,
+       0.334
+      ]
+     ],
+     "hidden_columns": 762
+    }
+   ]
+  },
+  "split-heads": {
+   "snippet": "def split_heads(x: torch.Tensor, num_heads: int) -> torch.Tensor:\n    num_tokens, dim = x.shape\n    return x.view(num_tokens, num_heads, dim // num_heads).transpose(0, 1)",
+   "parameters": null,
+   "inputs": [
+    {
+     "kind": "matrix",
+     "name": "queries",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.01,
+       0.228,
+       -0.713,
+       -0.978,
+       -0.336,
+       0.817
+      ],
+      [
+       1.334,
+       2.011,
+       -0.263,
+       0.277,
+       -0.441,
+       -0.743
+      ],
+      [
+       0.657,
+       -0.862,
+       0.854,
+       -0.872,
+       -0.728,
+       -0.637
+      ],
+      [
+       0.894,
+       -0.639,
+       0.717,
+       -0.498,
+       -0.934,
+       -0.294
+      ]
+     ],
+     "hidden_columns": 762
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "matrix",
+     "name": "queries, split",
+     "shape": [
+      12,
+      4,
+      64
+     ],
+     "note": "head 0 of 12",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.01,
+       0.228,
+       -0.713,
+       -0.978,
+       -0.336,
+       0.817
+      ],
+      [
+       1.334,
+       2.011,
+       -0.263,
+       0.277,
+       -0.441,
+       -0.743
+      ],
+      [
+       0.657,
+       -0.862,
+       0.854,
+       -0.872,
+       -0.728,
+       -0.637
+      ],
+      [
+       0.894,
+       -0.639,
+       0.717,
+       -0.498,
+       -0.934,
+       -0.294
+      ]
+     ],
+     "hidden_columns": 58
+    }
+   ]
+  },
+  "attention-scores": {
+   "snippet": "def attention_scores(queries: torch.Tensor, keys: torch.Tensor) -> torch.Tensor:\n    head_dim = queries.shape[-1]\n    return queries @ keys.transpose(-2, -1) / math.sqrt(head_dim)",
+   "parameters": null,
+   "inputs": [
+    {
+     "kind": "matrix",
+     "name": "queries",
+     "shape": [
+      12,
+      4,
+      64
+     ],
+     "note": "head 0 of 12",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.01,
+       0.228,
+       -0.713,
+       -0.978,
+       -0.336,
+       0.817
+      ],
+      [
+       1.334,
+       2.011,
+       -0.263,
+       0.277,
+       -0.441,
+       -0.743
+      ],
+      [
+       0.657,
+       -0.862,
+       0.854,
+       -0.872,
+       -0.728,
+       -0.637
+      ],
+      [
+       0.894,
+       -0.639,
+       0.717,
+       -0.498,
+       -0.934,
+       -0.294
+      ]
+     ],
+     "hidden_columns": 58
+    },
+    {
+     "kind": "matrix",
+     "name": "keys",
+     "shape": [
+      12,
+      4,
+      64
+     ],
+     "note": "head 0 of 12",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       -1.315,
+       1.838,
+       0.449,
+       -0.392,
+       0.775,
+       0.876
+      ],
+      [
+       -0.596,
+       1.873,
+       1.074,
+       -1.273,
+       -0.177,
+       0.587
+      ],
+      [
+       -1.862,
+       2.182,
+       2.029,
+       0.184,
+       2.172,
+       0.032
+      ],
+      [
+       -2.368,
+       2.732,
+       1.643,
+       0.063,
+       1.234,
+       0.884
+      ]
+     ],
+     "hidden_columns": 58
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "square",
+     "name": "scores",
+     "shape": [
+      12,
+      4,
+      4
+     ],
+     "note": "head 0 of 12",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "column_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.359,
+       -0.093,
+       -2.15,
+       -1.428
+      ],
+      [
+       0.27,
+       0.151,
+       -2.17,
+       -1.545
+      ],
+      [
+       -0.149,
+       -0.78,
+       -0.276,
+       -2.34
+      ],
+      [
+       -0.838,
+       -1.394,
+       -2.256,
+       -2.792
+      ]
+     ]
+    }
+   ]
+  },
+  "causal-mask": {
+   "snippet": "def apply_causal_mask(scores: torch.Tensor) -> torch.Tensor:\n    num_tokens = scores.shape[-1]\n    future = torch.triu(torch.ones(num_tokens, num_tokens, dtype=torch.bool), diagonal=1)\n    return scores.masked_fill(future, float(\"-inf\"))",
+   "parameters": null,
+   "inputs": [
+    {
+     "kind": "square",
+     "name": "scores",
+     "shape": [
+      12,
+      4,
+      4
+     ],
+     "note": "head 0 of 12",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "column_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.359,
+       -0.093,
+       -2.15,
+       -1.428
+      ],
+      [
+       0.27,
+       0.151,
+       -2.17,
+       -1.545
+      ],
+      [
+       -0.149,
+       -0.78,
+       -0.276,
+       -2.34
+      ],
+      [
+       -0.838,
+       -1.394,
+       -2.256,
+       -2.792
+      ]
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "square",
+     "name": "masked scores",
+     "shape": [
+      12,
+      4,
+      4
+     ],
+     "note": "head 0 of 12",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "column_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.359,
+       null,
+       null,
+       null
+      ],
+      [
+       0.27,
+       0.151,
+       null,
+       null
+      ],
+      [
+       -0.149,
+       -0.78,
+       -0.276,
+       null
+      ],
+      [
+       -0.838,
+       -1.394,
+       -2.256,
+       -2.792
+      ]
+     ]
+    }
+   ]
+  },
+  "softmax": {
+   "snippet": "def attention_weights(queries: torch.Tensor, keys: torch.Tensor) -> torch.Tensor:\n    scores = attention_scores(queries, keys)\n    return torch.softmax(apply_causal_mask(scores), dim=-1)",
+   "parameters": null,
+   "inputs": [
+    {
+     "kind": "square",
+     "name": "masked scores",
+     "shape": [
+      12,
+      4,
+      4
+     ],
+     "note": "head 0 of 12",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "column_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.359,
+       null,
+       null,
+       null
+      ],
+      [
+       0.27,
+       0.151,
+       null,
+       null
+      ],
+      [
+       -0.149,
+       -0.78,
+       -0.276,
+       null
+      ],
+      [
+       -0.838,
+       -1.394,
+       -2.256,
+       -2.792
+      ]
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "square",
+     "name": "attention weights",
+     "shape": [
+      12,
+      4,
+      4
+     ],
+     "note": "head 0 of 12",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "column_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       1.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      [
+       0.53,
+       0.47,
+       0.0,
+       0.0
+      ],
+      [
+       0.414,
+       0.22,
+       0.365,
+       0.0
+      ],
+      [
+       0.511,
+       0.293,
+       0.124,
+       0.072
+      ]
+     ]
+    }
+   ]
+  },
+  "weighted-sum": {
+   "snippet": "per_head_output = weights @ values                                  # [12, T, 64]",
+   "parameters": null,
+   "inputs": [
+    {
+     "kind": "square",
+     "name": "weights",
+     "shape": [
+      12,
+      4,
+      4
+     ],
+     "note": "head 0 of 12",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "column_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       1.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      [
+       0.53,
+       0.47,
+       0.0,
+       0.0
+      ],
+      [
+       0.414,
+       0.22,
+       0.365,
+       0.0
+      ],
+      [
+       0.511,
+       0.293,
+       0.124,
+       0.072
+      ]
+     ]
+    },
+    {
+     "kind": "matrix",
+     "name": "values",
+     "shape": [
+      12,
+      4,
+      64
+     ],
+     "note": "head 0 of 12",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       -0.063,
+       0.124,
+       0.022,
+       0.019,
+       0.019,
+       -0.372
+      ],
+      [
+       -0.064,
+       0.478,
+       0.068,
+       0.17,
+       -0.069,
+       -0.688
+      ],
+      [
+       0.166,
+       -0.394,
+       0.009,
+       0.05,
+       0.214,
+       0.362
+      ],
+      [
+       -0.049,
+       0.023,
+       -0.051,
+       0.117,
+       -0.107,
+       0.334
+      ]
+     ],
+     "hidden_columns": 58
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "matrix",
+     "name": "per-head output",
+     "shape": [
+      12,
+      4,
+      64
+     ],
+     "note": "head 0 of 12",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       -0.063,
+       0.124,
+       0.022,
+       0.019,
+       0.019,
+       -0.372
+      ],
+      [
+       -0.063,
+       0.29,
+       0.043,
+       0.09,
+       -0.022,
+       -0.521
+      ],
+      [
+       0.021,
+       0.013,
+       0.027,
+       0.063,
+       0.071,
+       -0.174
+      ],
+      [
+       -0.034,
+       0.156,
+       0.028,
+       0.074,
+       0.008,
+       -0.323
+      ]
+     ],
+     "hidden_columns": 58
+    }
+   ]
+  },
+  "merge-heads": {
+   "snippet": "def merge_heads(x: torch.Tensor) -> torch.Tensor:\n    num_heads, num_tokens, head_dim = x.shape\n    return x.transpose(0, 1).reshape(num_tokens, num_heads * head_dim)\n\n\nreturn self.output_projection(merge_heads(per_head_output))         # [T, 768]",
+   "parameters": 590592,
+   "inputs": [
+    {
+     "kind": "matrix",
+     "name": "per-head output",
+     "shape": [
+      12,
+      4,
+      64
+     ],
+     "note": "head 0 of 12",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       -0.063,
+       0.124,
+       0.022,
+       0.019,
+       0.019,
+       -0.372
+      ],
+      [
+       -0.063,
+       0.29,
+       0.043,
+       0.09,
+       -0.022,
+       -0.521
+      ],
+      [
+       0.021,
+       0.013,
+       0.027,
+       0.063,
+       0.071,
+       -0.174
+      ],
+      [
+       -0.034,
+       0.156,
+       0.028,
+       0.074,
+       0.008,
+       -0.323
+      ]
+     ],
+     "hidden_columns": 58
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "matrix",
+     "name": "merged",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       -0.063,
+       0.124,
+       0.022,
+       0.019,
+       0.019,
+       -0.372
+      ],
+      [
+       -0.063,
+       0.29,
+       0.043,
+       0.09,
+       -0.022,
+       -0.521
+      ],
+      [
+       0.021,
+       0.013,
+       0.027,
+       0.063,
+       0.071,
+       -0.174
+      ],
+      [
+       -0.034,
+       0.156,
+       0.028,
+       0.074,
+       0.008,
+       -0.323
+      ]
+     ],
+     "hidden_columns": 762
+    },
+    {
+     "kind": "matrix",
+     "name": "after output projection",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       -0.217,
+       -1.537,
+       0.786,
+       -0.017,
+       0.036,
+       -0.045
+      ],
+      [
+       -0.969,
+       -2.023,
+       0.772,
+       -0.032,
+       0.044,
+       0.027
+      ],
+      [
+       -1.13,
+       -1.361,
+       0.946,
+       -0.026,
+       0.126,
+       -0.014
+      ],
+      [
+       -0.792,
+       -0.634,
+       0.383,
+       -0.007,
+       0.048,
+       -0.084
+      ]
+     ],
+     "hidden_columns": 762
+    }
+   ]
+  },
+  "residual": {
+   "snippet": "hidden = hidden + self.attention(self.attention_norm(hidden))\nhidden = hidden + self.mlp(self.mlp_norm(hidden))",
+   "parameters": null,
+   "inputs": [
+    {
+     "kind": "matrix",
+     "name": "hidden (skip path)",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.026,
+       -0.35,
+       0.113,
+       -0.033,
+       -0.062,
+       -0.052
+      ],
+      [
+       -0.12,
+       -0.184,
+       -0.102,
+       -0.114,
+       -0.039,
+       0.064
+      ],
+      [
+       -0.069,
+       -0.169,
+       0.236,
+       -0.111,
+       -0.111,
+       0.072
+      ],
+      [
+       -0.051,
+       -0.068,
+       0.153,
+       -0.059,
+       -0.078,
+       -0.02
+      ]
+     ],
+     "hidden_columns": 762
+    },
+    {
+     "kind": "matrix",
+     "name": "attention output",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       -0.217,
+       -1.537,
+       0.786,
+       -0.017,
+       0.036,
+       -0.045
+      ],
+      [
+       -0.969,
+       -2.023,
+       0.772,
+       -0.032,
+       0.044,
+       0.027
+      ],
+      [
+       -1.13,
+       -1.361,
+       0.946,
+       -0.026,
+       0.126,
+       -0.014
+      ],
+      [
+       -0.792,
+       -0.634,
+       0.383,
+       -0.007,
+       0.048,
+       -0.084
+      ]
+     ],
+     "hidden_columns": 762
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "matrix",
+     "name": "hidden + attention",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       -0.19,
+       -1.887,
+       0.899,
+       -0.05,
+       -0.026,
+       -0.097
+      ],
+      [
+       -1.089,
+       -2.207,
+       0.67,
+       -0.146,
+       0.005,
+       0.091
+      ],
+      [
+       -1.199,
+       -1.53,
+       1.182,
+       -0.138,
+       0.015,
+       0.058
+      ],
+      [
+       -0.843,
+       -0.703,
+       0.536,
+       -0.066,
+       -0.03,
+       -0.103
+      ]
+     ],
+     "hidden_columns": 762
+    }
+   ]
+  },
+  "mlp": {
+   "snippet": "class MLP(nn.Module):\n    def __init__(self, config: GPT2Config):\n        super().__init__()\n        hidden_dim = config.mlp_expansion * config.embedding_dim\n        self.up_projection = nn.Linear(config.embedding_dim, hidden_dim)\n        self.down_projection = nn.Linear(hidden_dim, config.embedding_dim)\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        return self.down_projection(gelu(self.up_projection(x)))",
+   "parameters": 4722432,
+   "inputs": [
+    {
+     "kind": "matrix",
+     "name": "x",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.02,
+       -0.319,
+       0.169,
+       -0.045,
+       -0.029,
+       -0.142
+      ],
+      [
+       -0.056,
+       -0.282,
+       0.093,
+       -0.133,
+       -0.016,
+       0.025
+      ],
+      [
+       -0.098,
+       -0.253,
+       0.214,
+       -0.164,
+       -0.006,
+       0.009
+      ],
+      [
+       -0.058,
+       -0.103,
+       0.097,
+       -0.09,
+       -0.061,
+       -0.176
+      ]
+     ],
+     "hidden_columns": 762
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "matrix",
+     "name": "mlp output",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.522,
+       0.259,
+       -0.946,
+       -0.712,
+       -0.271,
+       0.066
+      ],
+      [
+       0.439,
+       0.367,
+       1.252,
+       -2.246,
+       -1.574,
+       1.558
+      ],
+      [
+       -0.611,
+       0.186,
+       -0.245,
+       0.433,
+       -0.272,
+       0.492
+      ],
+      [
+       -0.449,
+       0.676,
+       -0.115,
+       -0.829,
+       -0.184,
+       -0.146
+      ]
+     ],
+     "hidden_columns": 762
+    }
+   ]
+  },
+  "up-projection": {
+   "snippet": "hidden_dim = config.mlp_expansion * config.embedding_dim\nself.up_projection = nn.Linear(config.embedding_dim, hidden_dim)",
+   "parameters": 2362368,
+   "inputs": [
+    {
+     "kind": "matrix",
+     "name": "x",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.02,
+       -0.319,
+       0.169,
+       -0.045,
+       -0.029,
+       -0.142
+      ],
+      [
+       -0.056,
+       -0.282,
+       0.093,
+       -0.133,
+       -0.016,
+       0.025
+      ],
+      [
+       -0.098,
+       -0.253,
+       0.214,
+       -0.164,
+       -0.006,
+       0.009
+      ],
+      [
+       -0.058,
+       -0.103,
+       0.097,
+       -0.09,
+       -0.061,
+       -0.176
+      ]
+     ],
+     "hidden_columns": 762
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "matrix",
+     "name": "expanded",
+     "shape": [
+      4,
+      3072
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.265,
+       -1.855,
+       -2.121,
+       -0.712,
+       -0.496,
+       -0.284
+      ],
+      [
+       0.632,
+       -0.102,
+       -0.574,
+       -0.756,
+       0.665,
+       -0.432
+      ],
+      [
+       0.304,
+       -1.769,
+       -1.425,
+       -1.476,
+       -0.978,
+       -1.147
+      ],
+      [
+       -0.022,
+       -2.497,
+       -1.835,
+       -1.767,
+       -1.116,
+       -2.051
+      ]
+     ],
+     "hidden_columns": 3066
+    }
+   ]
+  },
+  "gelu": {
+   "snippet": "def gelu(x: torch.Tensor) -> torch.Tensor:\n    return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * x**3)))",
+   "parameters": null,
+   "inputs": [
+    {
+     "kind": "matrix",
+     "name": "expanded",
+     "shape": [
+      4,
+      3072
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.265,
+       -1.855,
+       -2.121,
+       -0.712,
+       -0.496,
+       -0.284
+      ],
+      [
+       0.632,
+       -0.102,
+       -0.574,
+       -0.756,
+       0.665,
+       -0.432
+      ],
+      [
+       0.304,
+       -1.769,
+       -1.425,
+       -1.476,
+       -0.978,
+       -1.147
+      ],
+      [
+       -0.022,
+       -2.497,
+       -1.835,
+       -1.767,
+       -1.116,
+       -2.051
+      ]
+     ],
+     "hidden_columns": 3066
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "matrix",
+     "name": "activated",
+     "shape": [
+      4,
+      3072
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.16,
+       -0.059,
+       -0.036,
+       -0.17,
+       -0.154,
+       -0.11
+      ],
+      [
+       0.465,
+       -0.047,
+       -0.162,
+       -0.17,
+       0.496,
+       -0.144
+      ],
+      [
+       0.188,
+       -0.068,
+       -0.11,
+       -0.104,
+       -0.161,
+       -0.144
+      ],
+      [
+       -0.011,
+       -0.015,
+       -0.061,
+       -0.068,
+       -0.148,
+       -0.041
+      ]
+     ],
+     "hidden_columns": 3066
+    }
+   ]
+  },
+  "down-projection": {
+   "snippet": "self.down_projection = nn.Linear(hidden_dim, config.embedding_dim)",
+   "parameters": 2360064,
+   "inputs": [
+    {
+     "kind": "matrix",
+     "name": "activated",
+     "shape": [
+      4,
+      3072
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.16,
+       -0.059,
+       -0.036,
+       -0.17,
+       -0.154,
+       -0.11
+      ],
+      [
+       0.465,
+       -0.047,
+       -0.162,
+       -0.17,
+       0.496,
+       -0.144
+      ],
+      [
+       0.188,
+       -0.068,
+       -0.11,
+       -0.104,
+       -0.161,
+       -0.144
+      ],
+      [
+       -0.011,
+       -0.015,
+       -0.061,
+       -0.068,
+       -0.148,
+       -0.041
+      ]
+     ],
+     "hidden_columns": 3066
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "matrix",
+     "name": "mlp output",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "layer 0",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       0.522,
+       0.259,
+       -0.946,
+       -0.712,
+       -0.271,
+       0.066
+      ],
+      [
+       0.439,
+       0.367,
+       1.252,
+       -2.246,
+       -1.574,
+       1.558
+      ],
+      [
+       -0.611,
+       0.186,
+       -0.245,
+       0.433,
+       -0.272,
+       0.492
+      ],
+      [
+       -0.449,
+       0.676,
+       -0.115,
+       -0.829,
+       -0.184,
+       -0.146
+      ]
+     ],
+     "hidden_columns": 762
+    }
+   ]
+  },
+  "final-norm": {
+   "snippet": "self.final_norm = LayerNorm(config.embedding_dim, config.layer_norm_eps)\nhidden = self.final_norm(hidden)         # [T, 768]",
+   "parameters": 1536,
+   "inputs": [
+    {
+     "kind": "matrix",
+     "name": "hidden",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "after layer 11",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       -1.205,
+       -1.506,
+       -0.418,
+       0.244,
+       1.377,
+       -0.054
+      ],
+      [
+       -2.81,
+       -5.076,
+       4.014,
+       -3.103,
+       1.686,
+       4.502
+      ],
+      [
+       -9.083,
+       -5.681,
+       1.696,
+       -6.954,
+       3.672,
+       4.079
+      ],
+      [
+       -3.562,
+       -2.19,
+       6.191,
+       -11.135,
+       4.709,
+       5.436
+      ]
+     ],
+     "hidden_columns": 762,
+     "row_means": [
+      0.543,
+      0.109,
+      0.038,
+      -0.033
+     ],
+     "row_stds": [
+      13.323,
+      9.989,
+      16.571,
+      17.457
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "matrix",
+     "name": "normalized",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       -0.182,
+       -0.175,
+       -0.203,
+       -0.026,
+       0.012,
+       -0.127
+      ],
+      [
+       -0.407,
+       -0.677,
+       0.67,
+       -0.376,
+       0.133,
+       0.479
+      ],
+      [
+       -0.768,
+       -0.438,
+       0.121,
+       -0.493,
+       0.212,
+       0.234
+      ],
+      [
+       -0.281,
+       -0.133,
+       0.606,
+       -0.743,
+       0.278,
+       0.321
+      ]
+     ],
+     "hidden_columns": 762,
+     "row_means": [
+      0.057,
+      0.288,
+      0.367,
+      0.405
+     ],
+     "row_stds": [
+      2.527,
+      6.32,
+      8.794,
+      8.634
+     ]
+    }
+   ]
+  },
+  "lm-head": {
+   "snippet": "class LMHead(nn.Module):\n    def __init__(self, token_embedding: nn.Embedding):\n        super().__init__()\n        self.token_embedding = token_embedding\n\n    def forward(self, hidden: torch.Tensor) -> torch.Tensor:\n        return hidden @ self.token_embedding.weight.T",
+   "parameters": 0,
+   "inputs": [
+    {
+     "kind": "matrix",
+     "name": "normalized",
+     "shape": [
+      4,
+      768
+     ],
+     "note": "",
+     "row_labels": [
+      "Alan",
+      " Turing",
+      " was",
+      " a"
+     ],
+     "values": [
+      [
+       -0.182,
+       -0.175,
+       -0.203,
+       -0.026,
+       0.012,
+       -0.127
+      ],
+      [
+       -0.407,
+       -0.677,
+       0.67,
+       -0.376,
+       0.133,
+       0.479
+      ],
+      [
+       -0.768,
+       -0.438,
+       0.121,
+       -0.493,
+       0.212,
+       0.234
+      ],
+      [
+       -0.281,
+       -0.133,
+       0.606,
+       -0.743,
+       0.278,
+       0.321
+      ]
+     ],
+     "hidden_columns": 762
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "predictions",
+     "name": "best guess at every position",
+     "shape": [
+      4,
+      50257
+     ],
+     "rows": [
+      {
+       "after": "Alan",
+       "predicted": ",",
+       "probability": 0.0386
+      },
+      {
+       "after": " Turing",
+       "predicted": ",",
+       "probability": 0.1539
+      },
+      {
+       "after": " was",
+       "predicted": " a",
+       "probability": 0.1255
+      },
+      {
+       "after": " a",
+       "predicted": " brilliant",
+       "probability": 0.0403
+      }
+     ]
+    },
+    {
+     "kind": "top_tokens",
+     "name": "next-token probabilities",
+     "shape": [
+      4,
+      50257
+     ],
+     "note": "after the last token, ' a'",
+     "candidates": [
+      {
+       "text": " brilliant",
+       "probability": 0.0403
+      },
+      {
+       "text": " man",
+       "probability": 0.024
+      },
+      {
+       "text": " mathematician",
+       "probability": 0.0238
+      },
+      {
+       "text": " British",
+       "probability": 0.0165
+      },
+      {
+       "text": " great",
+       "probability": 0.0165
+      },
+      {
+       "text": " physicist",
+       "probability": 0.0162
+      },
+      {
+       "text": " pioneer",
+       "probability": 0.0152
+      },
+      {
+       "text": " genius",
+       "probability": 0.0137
+      }
+     ]
+    }
+   ]
+  },
+  "generate": {
+   "snippet": "@torch.no_grad()\ndef generate(model: GPT2, token_ids: torch.Tensor, num_new_tokens: int) -> torch.Tensor:\n    for _ in range(num_new_tokens):\n        logits = model(token_ids[-model.config.context_length:])\n        next_token = logits[-1].argmax()\n        token_ids = torch.cat([token_ids, next_token.unsqueeze(0)])\n    return token_ids",
+   "parameters": null,
+   "inputs": [
+    {
+     "kind": "text",
+     "name": "prompt",
+     "text": "Alan Turing was a"
+    }
+   ],
+   "outputs": [
+    {
+     "kind": "steps",
+     "name": "greedy steps",
+     "steps": [
+      {
+       "text": " brilliant",
+       "probability": 0.0403
+      },
+      {
+       "text": " mathematician",
+       "probability": 0.2783
+      },
+      {
+       "text": ",",
+       "probability": 0.2365
+      },
+      {
+       "text": " and",
+       "probability": 0.1787
+      },
+      {
+       "text": " he",
+       "probability": 0.1168
+      },
+      {
+       "text": " was",
+       "probability": 0.2649
+      },
+      {
+       "text": " a",
+       "probability": 0.1077
+      },
+      {
+       "text": " great",
+       "probability": 0.0935
+      },
+      {
+       "text": " friend",
+       "probability": 0.0751
+      },
+      {
+       "text": " of",
+       "probability": 0.4903
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,36 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import gpt2 from '../../data/models/gpt2.json';
+
+const MODELS = [
+  {
+    slug: 'gpt2',
+    family: 'LLM',
+    name: 'GPT-2',
+    blurb: 'The baseline decoder: embeddings, causal attention, GELU MLP, residuals. Every later model is a diff against this one.',
+    parameters: '124M',
+  },
+];
+---
+
+<BaseLayout pageTitle="Architectures from scratch" description="Open LLM and diffusion architectures rebuilt from scratch, top-down, with real tensors at every block.">
+  <main class="mx-auto max-w-3xl px-4 py-12">
+    <h1 class="mb-3 text-3xl font-bold">Architectures from scratch</h1>
+    <p class="mb-8 text-gray-700">
+      Open models rebuilt in plain PyTorch, top-down: start from the whole model, then open each block until
+      only matrix multiplies are left. Every block shows the code that ran and the real tensors that went in
+      and came out. Click any box in a model's chart to jump straight to it.
+    </p>
+
+    <div class="grid gap-4">
+      {MODELS.map((model) => (
+        <a href={`/models/${model.slug}`} class="block rounded-xl border bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
+          <p class="mb-1 text-xs font-semibold text-blue-700">{model.family} · {model.parameters}</p>
+          <h2 class="mb-1 text-xl font-semibold">{model.name}</h2>
+          <p class="text-sm text-gray-600">{model.blurb}</p>
+          <p class="mt-2 font-mono text-xs text-gray-500">“{gpt2.prompt}” →“{gpt2.continuation}”</p>
+        </a>
+      ))}
+    </div>
+  </main>
+</BaseLayout>

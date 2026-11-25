@@ -1,0 +1,37 @@
+---
+// One level of a model's flow chart. Renders itself recursively for blocks that have
+// children, so the chart's nesting is the model's nesting. Every box is a link to the
+// section that explains it; ModelExplorerLayout highlights the one being read.
+import { targetOf, type FlowNode } from '../../data/models/flow';
+
+interface Props {
+  nodes: FlowNode[];
+  depth?: number;
+}
+
+const { nodes, depth = 0 } = Astro.props;
+---
+
+<ol class="flex flex-col items-stretch">
+  {nodes.map((node, index) => (
+    <li class="flex flex-col items-stretch">
+      {index > 0 && <span class="flow-arrow" aria-hidden="true">↓</span>}
+      {node.children ? (
+        <div class="flow-group" data-flow-group={targetOf(node)}>
+          <a href={`#${targetOf(node)}`} class="flow-node flow-group-header" data-flow-target={targetOf(node)}>
+            <span class="font-semibold">{node.label}</span>
+            {node.repeat && <span class="flow-repeat">{node.repeat}</span>}
+          </a>
+          <div class="pl-2 pt-1">
+            <Astro.self nodes={node.children} depth={depth + 1} />
+          </div>
+        </div>
+      ) : (
+        <a href={`#${targetOf(node)}`} class="flow-node" data-flow-target={targetOf(node)}>
+          <span>{node.label}</span>
+          {node.shape && <span class="flow-shape">{node.shape}</span>}
+        </a>
+      )}
+    </li>
+  ))}
+</ol>
