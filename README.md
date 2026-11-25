@@ -6,7 +6,7 @@ This is a personal portfolio built with Astro, React, and Tailwind CSS. It featu
 ## Structure
 - **CV**: /cv (from `src/content/cv.json`)
 - **Blog**: /blog (each post is a standalone `.astro` page in `src/pages/blog/`)
-- **Demos**: /demos (interactive dashboards embedded via iframe)
+- **Demos**: /demos/<slug> (optional interactive pages; none at the moment)
 - **Projects**: /projects (card grid and writeups)
 
 ## Getting Started
@@ -22,5 +22,5 @@ and deploys `./dist` to GitHub Pages.
 
 ## Writing a new blog post
 See **[AUTHORING.md](./AUTHORING.md)** for a full guide: account/auth setup, how to
-create a post and its index card, adding images and demos, the carousel/lightbox
-component, and how & where to push.
+create a post and its index card, adding images, widgets and demos,
+and how & where to push.

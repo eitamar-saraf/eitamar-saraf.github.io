@@ -16,16 +16,16 @@ There is **no dedicated "blog" repo**. A published post spans **two** repositori
    blog is just a section (`src/pages/blog/`). Each post's **writeup** lives here,
    together with a **copy** of the figures it displays (`public/plots/<slug>/`).
 
-2. **One repo per experiment** — e.g. `eitamar-saraf/BN-vs-NonBN` (the BatchNorm
-   study), `eitamar-saraf/act-bench` (activation-functions WIP). These hold the
-   **research code** that trains the models and generates the plots/dashboards.
+2. **One repo per experiment** — e.g. `eitamar-saraf/kda` (the Kimi Delta
+   Attention study behind the linear-attention series). These hold the
+   **research code** that trains the models and generates the plots/widgets.
 
 The experiment repo *produces* the assets; the website repo *displays* them and
 holds the prose. So the figures are generated in the experiment repo and **copied
 across** into the website repo — they are not shared or symlinked.
 
 ```
-experiment repo (e.g. BN-vs-NonBN)            website repo (eitamar-saraf.github.io)
+experiment repo (e.g. kda)                    website repo (eitamar-saraf.github.io)
   train.py / callbacks.py ──run──▶ plots ──copy──▶ public/plots/<slug>/*.png
   make_dashboard.py       ──run──▶ dashboard.html ─copy─▶ public/<slug>/...
                                                    src/pages/blog/<slug>.astro   ← the writeup
@@ -40,18 +40,16 @@ remote, and the same `gh`/HTTPS fix is needed for each (run the `git remote
 set-url` step inside each repo). Only the **website** repo auto-deploys to the
 live site (§5).
 
-Concretely, to ship the BatchNorm post:
+Concretely, to ship the linear-attention series:
 ```bash
 # 1. In the experiment repo: generate and commit the artifacts
-cd ~/code/BN-vs-NonBN
-python train.py --sweep --epochs 20        # produces runs/…
-python make_plots.py                       # produces the .png figures
-python make_dashboard.py --root runs_bn_probe/ --out bn_dashboard.html
+cd ~/code/kda
+python -m scripts.make_figures --runs runs/ --out figures/   # produces the .png figures
 git add -A && git commit -m "…" && git push origin main
 
 # 2. Copy the artifacts into the website repo
-cp path/to/figures/*.png ~/code/eitamar-saraf.github.io/public/plots/bn/
-cp bn_dashboard.html      ~/code/eitamar-saraf.github.io/public/bn/
+cp figures/*.png ~/code/eitamar-saraf.github.io/public/plots/kimi-linear/
+python -m scripts.sync_site          # copies the tested widget JS into public/kimi-linear/
 
 # 3. In the website repo: write the post and publish (see §4–§5)
 cd ~/code/eitamar-saraf.github.io
@@ -144,10 +142,8 @@ src/
     blog.astro            # the /blog index — a MANUAL grid of post cards
     blog_posts.astro      # /blog_posts — the "ideas" backlog list
     blog/
-      batchnorm.astro     # a post  → served at /blog/batchnorm
-      xor.astro           # a post  → served at /blog/xor
-    demos/
-      batchnorm.astro     # optional interactive demo → /demos/batchnorm
+      kda.astro           # a post  → served at /blog/kda
+    demos/                # (none yet) optional interactive demo → /demos/<slug>
   layouts/
     BlogPostLayout.astro  # wraps every post (title, date, prose, comments)
     BaseLayout.astro      # site shell (nav, footer)
@@ -214,20 +210,12 @@ The layout already renders the `title` as an `<h1>`, the `pubDate`, wraps your
 content in a Tailwind Typography `prose` container, and adds the comment widget.
 You only write the body.
 
-#### Handy building blocks (copy from `batchnorm.astro`)
+#### Handy building blocks (see `kda.astro`)
 - **Callout boxes:** `class="p-4 rounded border bg-{blue|emerald|amber|rose|gray}-50 text-{...}-900"`.
 - **Collapsible detail:** `<details><summary>…</summary>…</details>`.
-- **Image carousel + click-to-enlarge lightbox (the coverflow used in the BatchNorm post):**
-  ```html
-  <div class="not-prose bn-carousel"
-       data-images='["/plots/dropout/a.png","/plots/dropout/b.png"]'
-       data-captions='["Caption A","Caption B"]'></div>
-  ```
-  ⚠️ The carousel's CSS (`<style is:global>`) and JS (`<script type="module">`)
-  currently live **inside `batchnorm.astro`**. To reuse it in another post, either
-  copy those two blocks into your new post, or (better) extract them into a shared
-  component, e.g. `src/components/Carousel.astro`, and import it in both. The
-  markup above only works on a page that includes that script.
+- **Interactive figures:** `<div data-widget="chunkwise"></div>` plus
+  `<script type="module" src="/kimi-linear/widgets.js"></script>`.
+- **Inline side-notes:** the `.kn` markup documented at the top of `public/kimi-linear/notes.js`.
 
 ### 4.3 Add the post to the `/blog` index
 Open `src/pages/blog.astro` and add a card to the grid (copy an existing `<a>`
@@ -248,15 +236,15 @@ block and edit the href, image, title, and blurb):
 ### 4.4 (Optional) Add an interactive demo
 If the post links to a dashboard:
 1. Drop the standalone asset in `public/dropout/` (e.g. an exported HTML dashboard).
-2. Create `src/pages/demos/dropout.astro` that `<iframe>`s it (copy
-   `src/pages/demos/batchnorm.astro`).
+2. Create `src/pages/demos/dropout.astro` that wraps it in `BaseLayout` and
+   `<iframe>`s it (`<iframe src="/dropout/dashboard.html" class="w-full h-[88vh] border-0">`).
 3. Link to `/demos/dropout` from the post.
 
 ### 4.5 Preview
 ```bash
 npm run dev
 ```
-Open `/blog`, click the new card, check the post and any carousels/demos.
+Open `/blog`, click the new card, check the post and any widgets/demos.
 
 ---
 
@@ -303,7 +291,6 @@ cache): `https://eitamar-saraf.github.io/blog/dropout/?v=2`.
 | `Node.js vX is not supported by Astro` | Node too old. `nvm install 20 && nvm use 20` (§1.1). |
 | Images 404 on the live site | Asset must be under `public/` and referenced by an absolute path (`/plots/<slug>/file.png`), not a relative one. |
 | New post not on `/blog` | You created the page but didn't add a card to `src/pages/blog.astro` (§4.3). |
-| Carousel shows nothing / no buttons | The page is missing the carousel `<style>`/`<script>` blocks. Copy them from `batchnorm.astro` or use a shared component (§4.2). |
 | Old content still showing after deploy | CDN cache. Hard-refresh or add `?v=N` to the URL. |
 | Deploy succeeded but page didn't change | Check `gh run list` — confirm the run was for your commit SHA and concluded `success`. |
 

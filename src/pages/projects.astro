@@ -8,45 +8,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     <p class="mb-6 text-gray-700">Explore my interactive ML projects and demos.</p>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div class="border rounded-lg p-4 shadow-sm bg-white">
-        <h2 class="text-xl font-semibold mb-2">XOR Demo</h2>
-        <p class="mb-3 text-gray-700">Linear vs Non-linear models on the XOR problem.</p>
+        <h2 class="text-xl font-semibold mb-2">Kimi Delta Attention</h2>
+        <p class="mb-3 text-gray-700">Kimi Delta Attention implemented and illustrated: one recurrence, tested against the paper, with interactive figures that run the same maths in the browser.</p>
         <ul class="list-disc list-inside space-y-1 text-blue-700">
-          <li><a href="https://github.com/eitamar-saraf/XOR" target="_blank" rel="noopener" class="hover:underline">Repository</a></li>
-          <li><a href="/demos/xor" class="hover:underline">Live Demo</a></li>
-          <li><a href="/blog/xor" class="hover:underline">Writeup</a></li>
+          <li><a href="https://github.com/eitamar-saraf/kda" target="_blank" rel="noopener" class="hover:underline">Repository</a></li>
+          <li><a href="/blog/linear-attention" class="hover:underline">Writeup (series, part 1)</a></li>
         </ul>
       </div>
-
-      <div class="border rounded-lg p-4 shadow-sm bg-white">
-        <h2 class="text-xl font-semibold mb-2">BatchNorm Comparison</h2>
-        <p class="mb-3 text-gray-700">BatchNorm vs No-BN in neural networks.</p>
-        <ul class="list-disc list-inside space-y-1 text-blue-700">
-          <li><a href="https://github.com/eitamar-saraf/BN-vs-NonBN" target="_blank" rel="noopener" class="hover:underline">Repository</a></li>
-          <li><a href="/demos/batchnorm" class="hover:underline">Live Demo</a></li>
-          <li><a href="/blog/batchnorm" class="hover:underline">Writeup</a></li>
-        </ul>
-      </div>
-
-      <div class="border rounded-lg p-4 shadow-sm bg-white">
-        <h2 class="text-xl font-semibold mb-2">BatchNorm running_var Poisoning</h2>
-        <p class="mb-3 text-gray-700">How a few giant-scale samples silently poison BatchNorm's eval buffer — a CPU-runnable reproduction, the debugging story, and three fixes (GroupNorm, unit-box, FiLM scale conditioning).</p>
-        <ul class="list-disc list-inside space-y-1 text-blue-700">
-          <li><a href="https://github.com/eitamar-saraf/scale-bn-demo" target="_blank" rel="noopener" class="hover:underline">Repository</a></li>
-          <li><a href="/demos/bn-poisoning" class="hover:underline">Live Demo</a></li>
-          <li><a href="/blog/batchnorm-poisoning" class="hover:underline">Writeup</a></li>
-        </ul>
-      </div>
-
-      <div class="border rounded-lg p-4 shadow-sm bg-white">
-        <h2 class="text-xl font-semibold mb-2">Activation Functions Showdown</h2>
-        <p class="mb-3 text-gray-700">312 runs across 8 activations and 5 tasks — which activation wins depends on your block, not your data.</p>
-        <ul class="list-disc list-inside space-y-1 text-blue-700">
-          <li><a href="https://github.com/eitamar-saraf/act-bench" target="_blank" rel="noopener" class="hover:underline">Repository</a></li>
-          <li><a href="/blog/activation-functions-showdown" class="hover:underline">Writeup</a></li>
-        </ul>
-      </div>
-
-      
     </div>
   </main>
 </BaseLayout>
